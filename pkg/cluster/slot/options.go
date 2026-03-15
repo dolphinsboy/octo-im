@@ -26,12 +26,30 @@ type Options struct {
 
 	// OnSaveConfig 保存槽配置
 	OnSaveConfig func(slotId uint32, cfg types.Config) error
+
+	// OnCreateSnapshot 创建状态机快照回调（序列化当前状态到 []byte）
+	OnCreateSnapshot func(slotId uint32) ([]byte, error)
+	// OnApplySnapshot 恢复状态机快照回调（从 []byte 恢复状态）
+	OnApplySnapshot func(slotId uint32, data []byte) error
+
+	// CompactionEnabled 是否启用 slot raft 日志压缩
+	CompactionEnabled bool
+	// CompactionIntervalTick 压缩检查间隔（tick 次数）
+	CompactionIntervalTick int
+	// CompactionMinLogCount 触发压缩的最小日志数
+	CompactionMinLogCount uint64
+	// CompactionRetainCount 压缩后保留的最近日志数
+	CompactionRetainCount uint64
 }
 
 func NewOptions(opt ...Option) *Options {
 	defaultOpts := &Options{
-		DataDir:        "clusterdata",
-		SlotDbShardNum: 8,
+		DataDir:                "clusterdata",
+		SlotDbShardNum:         8,
+		CompactionEnabled:      false,
+		CompactionIntervalTick: 2000,
+		CompactionMinLogCount:  10000,
+		CompactionRetainCount:  1000,
 	}
 	for _, o := range opt {
 		o(defaultOpts)
@@ -89,6 +107,43 @@ func WithOnSaveConfig(onSaveConfig func(slotId uint32, cfg types.Config) error) 
 		o.OnSaveConfig = onSaveConfig
 	}
 }
+
+func WithOnCreateSnapshot(onCreateSnapshot func(slotId uint32) ([]byte, error)) Option {
+	return func(o *Options) {
+		o.OnCreateSnapshot = onCreateSnapshot
+	}
+}
+
+func WithOnApplySnapshot(onApplySnapshot func(slotId uint32, data []byte) error) Option {
+	return func(o *Options) {
+		o.OnApplySnapshot = onApplySnapshot
+	}
+}
+
+func WithCompactionEnabled(enabled bool) Option {
+	return func(o *Options) {
+		o.CompactionEnabled = enabled
+	}
+}
+
+func WithCompactionIntervalTick(interval int) Option {
+	return func(o *Options) {
+		o.CompactionIntervalTick = interval
+	}
+}
+
+func WithCompactionMinLogCount(count uint64) Option {
+	return func(o *Options) {
+		o.CompactionMinLogCount = count
+	}
+}
+
+func WithCompactionRetainCount(count uint64) Option {
+	return func(o *Options) {
+		o.CompactionRetainCount = count
+	}
+}
+
 func WithRPC(rpc icluster.RPC) Option {
 	return func(o *Options) {
 		o.RPC = rpc

@@ -18,7 +18,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/auth"
 	"github.com/WuKongIM/WuKongIM/pkg/auth/resource"
 	"github.com/WuKongIM/WuKongIM/pkg/network"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
@@ -63,7 +63,7 @@ func (s *Server) handleGetPlugins(c *wkhttp.Context) {
 		return
 	}
 
-	plugins, err := service.Store.DB().GetPlugins()
+	plugins, err := service.Store.GetPlugins()
 	if err != nil {
 		s.Error("get plugins failed", zap.Error(err))
 		c.ResponseError(err)
@@ -228,7 +228,7 @@ func (s *Server) handleUpdatePluginConfig(c *wkhttp.Context) {
 	}
 
 	// 获取插件数据
-	plugin, err := service.Store.DB().GetPlugin(pluginNo)
+	plugin, err := service.Store.GetPlugin(pluginNo)
 	if err != nil {
 		s.Error("get plugin failed", zap.Error(err), zap.String("plugin", pluginNo))
 		c.ResponseError(err)
@@ -247,7 +247,7 @@ func (s *Server) handleUpdatePluginConfig(c *wkhttp.Context) {
 	}
 
 	// 更新插件配置
-	err = service.Store.DB().UpdatePluginConfig(pluginNo, req.Config)
+	err = service.Store.UpdatePluginConfig(pluginNo, req.Config)
 	if err != nil {
 		s.Error("update plugin config failed", zap.Error(err), zap.String("plugin", pluginNo))
 		c.ResponseError(err)
@@ -493,7 +493,7 @@ func (s *Server) forwardSearchPluginUsers(url string, nodeId uint64) ([]*pluginU
 }
 
 func (s *Server) searchPluginUsers(req wkdb.SearchPluginUserReq) ([]*pluginUserResp, error) {
-	pluginUsers, err := service.Store.DB().SearchPluginUsers(req)
+	pluginUsers, err := service.Store.SearchPluginUsers(req)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +544,7 @@ func (s *Server) handleUninstall(c *wkhttp.Context) {
 		return
 	}
 
-	plugin, err := service.Store.DB().GetPlugin(req.PluginNo)
+	plugin, err := service.Store.GetPlugin(req.PluginNo)
 	if err != nil {
 		s.Error("get plugin failed", zap.Error(err), zap.String("plugin_no", req.PluginNo))
 		c.ResponseError(err)
@@ -557,7 +557,7 @@ func (s *Server) handleUninstall(c *wkhttp.Context) {
 	}
 
 	// 从数据库删除插件
-	err = service.Store.DB().DeletePlugin(req.PluginNo)
+	err = service.Store.DeletePlugin(req.PluginNo)
 	if err != nil {
 		s.Error("delete plugin failed", zap.Error(err), zap.String("plugin_no", req.PluginNo))
 		c.ResponseError(err)

@@ -25,11 +25,21 @@ func newSlot(slot *types.Slot, s *Server) *Slot {
 	if err != nil {
 		st.Panic("get state failed", zap.Error(err))
 	}
-	lastLogIndex, err := s.storage.GetTermStartIndex(shardNo, state.LastTerm)
-	if err != nil {
-		st.Panic("get last term failed", zap.Error(err))
+	lastLogIndex := state.LastTermStartIndex
+	if state.LastTerm > 0 && lastLogIndex == 0 {
+		lastLogIndex, err = s.storage.GetTermStartIndex(shardNo, state.LastTerm)
+		if err != nil {
+			st.Panic("get last term failed", zap.Error(err))
+		}
 	}
-	node := raft.NewNode(lastLogIndex, state, raft.NewOptions(raft.WithKey(shardNo), raft.WithNodeId(s.opts.NodeId)))
+	node := raft.NewNode(lastLogIndex, state, raft.NewOptions(
+		raft.WithKey(shardNo),
+		raft.WithNodeId(s.opts.NodeId),
+		raft.WithCompactionEnabled(s.opts.CompactionEnabled),
+		raft.WithCompactionIntervalTick(s.opts.CompactionIntervalTick),
+		raft.WithCompactionMinLogCount(s.opts.CompactionMinLogCount),
+		raft.WithCompactionRetainCount(s.opts.CompactionRetainCount),
+	))
 	st.Node = node
 
 	return st

@@ -3,6 +3,7 @@ package raftgroup
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
@@ -80,6 +81,26 @@ func (rg *RaftGroup) handleGetLogsReq(r IRaft, e types.Event) {
 			rg.Advance()
 			return
 		}
+		// 检查日志是否已被压缩，如果是则发送完整快照
+		snapshot, snapErr := rg.opts.Storage.GetSnapshot(r.Key())
+		if snapErr == nil && !snapshot.Meta.IsEmpty() && e.Index <= snapshot.Meta.LastIncludedIndex {
+			snapshotLog := types.Log{
+				Index: snapshot.Meta.LastIncludedIndex,
+				Term:  snapshot.Meta.LastIncludedTerm,
+				Data:  snapshot.Data,
+			}
+			rg.AddEvent(r.Key(), types.Event{
+				To:          e.From,
+				Type:        types.GetLogsResp,
+				Index:       snapshot.Meta.LastIncludedIndex,
+				LastLogTerm: snapshot.Meta.LastIncludedTerm,
+				Logs:        []types.Log{snapshotLog},
+				Reason:      types.ReasonInstallSnapshot,
+			})
+			rg.Advance()
+			return
+		}
+
 		// 获取日志数据
 		logs, err := rg.opts.Storage.GetLogs(r.Key(), e.Index, e.StoredIndex+1, rg.opts.MaxLogSizePerBatch)
 		if err != nil {
@@ -383,6 +404,140 @@ func (rg *RaftGroup) followerToLeader(r IRaft, followerId uint64) (types.Config,
 
 	return cfg, nil
 
+}
+
+func (rg *RaftGroup) handleCompactReq(r IRaft, e types.Event) {
+	err := rg.goPool.Submit(func() {
+		logs, err := rg.opts.Storage.GetLogs(r.Key(), e.Index, e.Index+1, 0)
+		if err != nil {
+			rg.Error("load compact log failed", zap.Error(err), zap.String("key", r.Key()), zap.Uint64("index", e.Index))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+		if len(logs) == 0 {
+			rg.Error("compact log not found", zap.String("key", r.Key()), zap.Uint64("index", e.Index))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+
+		// 1. 创建状态机快照数据
+		data, err := rg.opts.Storage.CreateSnapshot(r.Key(), e.Index)
+		if err != nil {
+			rg.Error("create snapshot failed", zap.Error(err), zap.String("key", r.Key()))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+
+		// 2. 保存完整快照（元数据 + 状态数据）
+		snapshotData := types.SnapshotData{
+			Meta: types.Snapshot{
+				LastIncludedIndex: e.Index,
+				LastIncludedTerm:  logs[0].Term,
+				Config:            r.Config().Clone(),
+				Size:              uint64(len(data)),
+				CreatedAt:         time.Now().UnixNano(),
+			},
+			Data: data,
+		}
+		err = rg.opts.Storage.SaveSnapshot(r.Key(), snapshotData)
+		if err != nil {
+			rg.Error("save snapshot failed", zap.Error(err), zap.String("key", r.Key()))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+
+		err = rg.opts.Storage.CompactLogTo(r.Key(), e.Index)
+		if err != nil {
+			rg.Error("compact log failed", zap.Error(err), zap.String("key", r.Key()))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+
+		rg.Info("compact log completed", zap.String("key", r.Key()), zap.Uint64("compactIndex", e.Index))
+		rg.AddEvent(r.Key(), types.Event{
+			Type:   types.CompactResp,
+			Index:  e.Index,
+			Reason: types.ReasonOk,
+		})
+		rg.Advance()
+	})
+	if err != nil {
+		rg.Error("submit compact req failed", zap.Error(err), zap.String("key", r.Key()))
+		rg.AddEvent(r.Key(), types.Event{
+			Type:   types.CompactResp,
+			Reason: types.ReasonError,
+		})
+	}
+}
+
+func (rg *RaftGroup) handleInstallSnapshotReq(r IRaft, e types.Event) {
+	err := rg.goPool.Submit(func() {
+		var snapshotData []byte
+		if len(e.Logs) > 0 {
+			snapshotData = e.Logs[0].Data
+		}
+
+		sd := types.SnapshotData{
+			Meta: types.Snapshot{
+				LastIncludedIndex: e.Index,
+				LastIncludedTerm:  e.LastLogTerm,
+			},
+			Data: snapshotData,
+		}
+		err := rg.opts.Storage.SaveSnapshot(r.Key(), sd)
+		if err != nil {
+			rg.Error("install snapshot: save failed", zap.Error(err), zap.String("key", r.Key()))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.InstallSnapshotResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+
+		err = rg.opts.Storage.ApplySnapshot(r.Key(), sd)
+		if err != nil {
+			rg.Error("install snapshot: apply failed", zap.Error(err), zap.String("key", r.Key()))
+			rg.AddEvent(r.Key(), types.Event{
+				Type:   types.InstallSnapshotResp,
+				Reason: types.ReasonError,
+			})
+			return
+		}
+
+		rg.Info("install snapshot completed",
+			zap.String("key", r.Key()),
+			zap.Uint64("snapshotIndex", e.Index),
+			zap.Uint32("snapshotTerm", e.LastLogTerm))
+		rg.AddEvent(r.Key(), types.Event{
+			Type:        types.InstallSnapshotResp,
+			Index:       e.Index,
+			LastLogTerm: e.LastLogTerm,
+			Reason:      types.ReasonOk,
+		})
+		rg.Advance()
+	})
+	if err != nil {
+		rg.Error("submit install snapshot req failed", zap.Error(err), zap.String("key", r.Key()))
+		rg.AddEvent(r.Key(), types.Event{
+			Type:   types.InstallSnapshotResp,
+			Reason: types.ReasonError,
+		})
+	}
 }
 
 func (rg *RaftGroup) handleDestory(r IRaft) {

@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/WuKongIM/WuKongIM/pkg/network"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -64,7 +64,7 @@ func (s *Server) messageSearch(c *wkhttp.Context) {
 
 	// 搜索本地消息
 	var searchLocalMessage = func() ([]*messageResp, error) {
-		messages, err := s.db.SearchMessages(wkdb.MessageSearchReq{
+		messages, err := s.store.SearchMessages(wkdb.MessageSearchReq{
 			MessageId:        messageId,
 			FromUid:          fromUid,
 			Limit:            limit,

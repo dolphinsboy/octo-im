@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/WuKongIM/WuKongIM/pkg/network"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -80,7 +80,7 @@ func (s *Server) channelSearch(c *wkhttp.Context) {
 	}
 
 	searchLocalChannelInfos := func() ([]*channelInfoResp, error) {
-		channelInfos, err := s.db.SearchChannels(wkdb.ChannelSearchReq{
+		channelInfos, err := s.store.SearchChannels(wkdb.ChannelSearchReq{
 			ChannelId:          channelId,
 			ChannelType:        channelType,
 			Ban:                ban,
@@ -254,7 +254,7 @@ func (s *Server) subscribersGet(c *wkhttp.Context) {
 		c.Forward(fmt.Sprintf("%s%s", leaderNode.ApiServerAddr, c.Request.URL.Path))
 		return
 	}
-	subscribers, err := s.db.GetSubscribers(channelId, channelType)
+	subscribers, err := s.store.GetSubscribers(channelId, channelType)
 	if err != nil {
 		s.Error("GetSubscribers error", zap.Error(err))
 		c.ResponseError(err)
@@ -282,7 +282,7 @@ func (s *Server) denylistGet(c *wkhttp.Context) {
 		c.Forward(fmt.Sprintf("%s%s", leaderNode.ApiServerAddr, c.Request.URL.Path))
 		return
 	}
-	members, err := s.db.GetDenylist(channelId, channelType)
+	members, err := s.store.GetDenylist(channelId, channelType)
 	if err != nil {
 		s.Error("GetDenylist error", zap.Error(err))
 		c.ResponseError(err)
@@ -310,7 +310,7 @@ func (s *Server) allowlistGet(c *wkhttp.Context) {
 		c.Forward(fmt.Sprintf("%s%s", leaderNode.ApiServerAddr, c.Request.URL.Path))
 		return
 	}
-	allowlist, err := s.db.GetAllowlist(channelId, channelType)
+	allowlist, err := s.store.GetAllowlist(channelId, channelType)
 	if err != nil {
 		s.Error("GetAllowlist error", zap.Error(err))
 		c.ResponseError(err)

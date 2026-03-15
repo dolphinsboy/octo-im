@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/WuKongIM/WuKongIM/internal/options"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
 	"github.com/stretchr/testify/assert"
 )

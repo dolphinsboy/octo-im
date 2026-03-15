@@ -2,12 +2,13 @@ package slot
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"strconv"
 	"sync"
 
 	"github.com/WuKongIM/WuKongIM/pkg/raft/raftgroup"
-	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
+	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"github.com/bwmarrin/snowflake"
@@ -40,6 +41,9 @@ func NewServer(opts *Options) *Server {
 }
 
 func (s *Server) Start() error {
+	if err := s.validateOptions(); err != nil {
+		return err
+	}
 
 	err := s.storage.Open()
 	if err != nil {
@@ -68,9 +72,19 @@ func (s *Server) Stop() {
 	}
 }
 
-func (s *Server) AddEvent(shardNo string, event types.Event) {
+func (s *Server) AddEvent(shardNo string, event rafttype.Event) {
 	s.raftGroup.AddEvent(shardNo, event)
 	s.raftGroup.Advance()
+}
+
+func (s *Server) validateOptions() error {
+	if !s.opts.CompactionEnabled {
+		return nil
+	}
+	if s.opts.OnCreateSnapshot == nil || s.opts.OnApplySnapshot == nil {
+		return fmt.Errorf("slot compaction requires snapshot callbacks: %w", rafttype.ErrSnapshotNotSupported)
+	}
+	return nil
 }
 
 func SlotIdToKey(slotId uint32) string {
@@ -133,7 +147,7 @@ func (s *Server) LastIndex(slotId uint32) (uint64, error) {
 	return s.storage.LastIndex(shardNo)
 }
 
-func (s *Server) LastLog(slotId uint32) (types.Log, error) {
+func (s *Server) LastLog(slotId uint32) (rafttype.Log, error) {
 	return s.storage.LastLog(SlotIdToKey(slotId))
 }
 
@@ -145,7 +159,7 @@ func (s *Server) GetSlotRaft(slotId uint32) *Slot {
 	return raft.(*Slot)
 }
 
-func (s *Server) GetLogsInReverseOrder(slotId uint32, startLogIndex uint64, endLogIndex uint64, limit int) ([]types.Log, error) {
+func (s *Server) GetLogsInReverseOrder(slotId uint32, startLogIndex uint64, endLogIndex uint64, limit int) ([]rafttype.Log, error) {
 	shardNo := SlotIdToKey(slotId)
 	return s.storage.GetLogsInReverseOrder(shardNo, startLogIndex, endLogIndex, limit)
 }

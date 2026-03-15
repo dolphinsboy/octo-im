@@ -15,7 +15,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/internal/service"
 	"github.com/WuKongIM/WuKongIM/internal/types"
 	"github.com/WuKongIM/WuKongIM/internal/types/pluginproto"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"github.com/WuKongIM/wkrpc"
 	"github.com/sendgrid/rest"
@@ -67,7 +67,7 @@ func (a *rpc) pluginStart(c *wkrpc.Context) {
 		}
 	}
 
-	existPlugin, err := service.Store.DB().GetPlugin(pluginInfo.No)
+	existPlugin, err := service.Store.GetPlugin(pluginInfo.No)
 	if err != nil {
 		a.Error("get plugin failed", zap.Error(err))
 		c.WriteErr(err)
@@ -105,7 +105,7 @@ func (a *rpc) pluginStart(c *wkrpc.Context) {
 
 	// 如果插件信息有变更则更新
 	if a.pluginChange(existPlugin, newPlugin) {
-		err = service.Store.DB().AddOrUpdatePlugin(newPlugin)
+		err = service.Store.AddOrUpdatePlugin(newPlugin)
 		if err != nil {
 			a.Error("add or update plugin failed", zap.Error(err), zap.Any("plugin", newPlugin))
 			c.WriteErr(err)

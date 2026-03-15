@@ -9,6 +9,7 @@ const (
 	maxIndexKeySize             uint64 = 4
 	appliedIndexKeySize         uint64 = 4
 	leaderTermStartIndexKeySize uint64 = 12
+	snapshotKeySize             uint64 = 4
 )
 
 var (
@@ -16,6 +17,7 @@ var (
 	appliedIndexKey               = [2]byte{0x2, 0x2}
 	maxIndexKeyHeader             = [2]byte{0x3, 0x3}
 	leaderTermStartIndexKeyHeader = [2]byte{0x4, 0x4}
+	snapshotKeyHeader             = [2]byte{0x5, 0x5}
 )
 
 func NewLogKey(index uint64) []byte {
@@ -55,6 +57,15 @@ func NewAppliedIndexKey() []byte {
 	key := make([]byte, appliedIndexKeySize)
 	key[0] = appliedIndexKey[0]
 	key[1] = appliedIndexKey[1]
+	key[2] = 0
+	key[3] = 0
+	return key
+}
+
+func NewSnapshotKey() []byte {
+	key := make([]byte, snapshotKeySize)
+	key[0] = snapshotKeyHeader[0]
+	key[1] = snapshotKeyHeader[1]
 	key[2] = 0
 	key[3] = 0
 	return key

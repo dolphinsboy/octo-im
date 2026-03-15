@@ -1,6 +1,6 @@
 package store
 
-import "github.com/WuKongIM/WuKongIM/pkg/wkdb"
+import "github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 
 // AddSubscribers 添加订阅者
 func (s *Store) AddSubscribers(channelId string, channelType uint8, subscribers []wkdb.Member) error {
@@ -21,7 +21,7 @@ func (s *Store) AddSubscribers(channelId string, channelType uint8, subscribers 
 }
 
 func (s *Store) ExistSubscriber(channelId string, channelType uint8, uid string) (bool, error) {
-	return s.wdb.ExistSubscriber(channelId, channelType, uid)
+	return s.channelStateStore.ExistSubscriber(channelId, channelType, uid)
 }
 
 // RemoveSubscribers 移除订阅者
@@ -55,7 +55,7 @@ func (s *Store) RemoveAllSubscriber(channelId string, channelType uint8) error {
 }
 
 func (s *Store) GetSubscribers(channelID string, channelType uint8) ([]wkdb.Member, error) {
-	return s.wdb.GetSubscribers(channelID, channelType)
+	return s.channelStateStore.GetSubscribers(channelID, channelType)
 }
 
 // AddOrUpdateChannel add or update channel
@@ -102,11 +102,11 @@ func (s *Store) DeleteChannel(channelId string, channelType uint8) error {
 }
 
 func (s *Store) GetChannel(channelId string, channelType uint8) (wkdb.ChannelInfo, error) {
-	return s.wdb.GetChannel(channelId, channelType)
+	return s.channelStateStore.GetChannel(channelId, channelType)
 }
 
 func (s *Store) ExistChannel(channelId string, channelType uint8) (bool, error) {
-	return s.wdb.ExistChannel(channelId, channelType)
+	return s.channelStateStore.ExistChannel(channelId, channelType)
 }
 
 func (s *Store) AddDenylist(channelId string, channelType uint8, members []wkdb.Member) error {
@@ -128,12 +128,12 @@ func (s *Store) AddDenylist(channelId string, channelType uint8, members []wkdb.
 }
 
 func (s *Store) GetDenylist(channelId string, channelType uint8) ([]wkdb.Member, error) {
-	return s.wdb.GetDenylist(channelId, channelType)
+	return s.channelStateStore.GetDenylist(channelId, channelType)
 }
 
 func (s *Store) ExistDenylist(channelId string, channelType uint8, uid string) (bool, error) {
 
-	return s.wdb.ExistDenylist(channelId, channelType, uid)
+	return s.channelStateStore.ExistDenylist(channelId, channelType, uid)
 }
 
 func (s *Store) RemoveAllDenylist(channelId string, channelType uint8) error {
@@ -183,11 +183,11 @@ func (s *Store) AddAllowlist(channelId string, channelType uint8, members []wkdb
 }
 
 func (s *Store) GetAllowlist(channelID string, channelType uint8) ([]wkdb.Member, error) {
-	return s.wdb.GetAllowlist(channelID, channelType)
+	return s.channelStateStore.GetAllowlist(channelID, channelType)
 }
 
 func (s *Store) ExistAllowlist(channelId string, channelType uint8, uid string) (bool, error) {
-	return s.wdb.ExistAllowlist(channelId, channelType, uid)
+	return s.channelStateStore.ExistAllowlist(channelId, channelType, uid)
 }
 
 func (s *Store) RemoveAllAllowlist(channelId string, channelType uint8) error {
@@ -221,5 +221,5 @@ func (s *Store) RemoveAllowlist(channelId string, channelType uint8, uids []stri
 
 // 是否存在白名单
 func (s *Store) HasAllowlist(channelId string, channelType uint8) (bool, error) {
-	return s.wdb.HasAllowlist(channelId, channelType)
+	return s.channelStateStore.HasAllowlist(channelId, channelType)
 }

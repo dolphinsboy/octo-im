@@ -144,7 +144,7 @@ func (h *Handler) handleOnSend(event *eventbus.Event) {
 
 // 检查发送者全局权限
 func (h *Handler) checkGlobalSendPermission(from string) (wkproto.ReasonCode, error) {
-	channelInfo, err := service.Store.GetChannel(from, wkproto.ChannelTypePerson)
+	channelInfo, err := service.LoadChannelInfoOrEmpty(from, wkproto.ChannelTypePerson)
 	if err != nil {
 		return wkproto.ReasonSystemError, err
 	}

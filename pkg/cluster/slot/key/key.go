@@ -10,6 +10,7 @@ const (
 	maxIndexKeySize             uint64 = 12
 	appliedIndexKeySize         uint64 = 12
 	leaderTermStartIndexKeySize uint64 = 16
+	snapshotKeySize             uint64 = 12
 )
 
 var (
@@ -17,6 +18,7 @@ var (
 	appliedIndexKey               = [2]byte{0x2, 0x2}
 	maxIndexKeyHeader             = [2]byte{0x3, 0x3}
 	leaderTermStartIndexKeyHeader = [2]byte{0x4, 0x4}
+	snapshotKeyHeader             = [2]byte{0x5, 0x5}
 )
 
 func NewLogKey(shardNo string, index uint64) []byte {
@@ -63,6 +65,17 @@ func NewAppliedIndexKey(shardNo string) []byte {
 	shardID := shardNoToShardID(shardNo)
 	key[0] = appliedIndexKey[0]
 	key[1] = appliedIndexKey[1]
+	key[2] = 0
+	key[3] = 0
+	binary.BigEndian.PutUint64(key[4:], shardID)
+	return key
+}
+
+func NewSnapshotKey(shardNo string) []byte {
+	key := make([]byte, snapshotKeySize)
+	shardID := shardNoToShardID(shardNo)
+	key[0] = snapshotKeyHeader[0]
+	key[1] = snapshotKeyHeader[1]
 	key[2] = 0
 	key[3] = 0
 	binary.BigEndian.PutUint64(key[4:], shardID)

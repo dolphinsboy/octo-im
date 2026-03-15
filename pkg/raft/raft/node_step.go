@@ -82,6 +82,11 @@ func (n *Node) Step(e types.Event) error {
 		} else {
 			n.queue.applying = false
 		}
+	case types.CompactResp: // 压缩返回
+		n.compacting = false
+		if e.Reason == types.ReasonOk {
+			n.queue.compactTo(e.Index)
+		}
 	default:
 		if n.stepFunc != nil {
 			return n.stepFunc(e)
@@ -261,6 +266,13 @@ func (n *Node) stepFollower(e types.Event) error {
 			n.truncating = true
 			n.sendTruncateReq(e.Index)
 			n.advance()
+		case types.ReasonInstallSnapshot:
+			if n.installing {
+				return nil
+			}
+			n.installing = true
+			n.sendInstallSnapshotReq(e.Index, e.LastLogTerm, e.Logs)
+			n.advance()
 		default:
 			n.Error("sync error", zap.Uint64("from", e.From), zap.Uint64("index", e.Index), zap.String("reason", e.Reason.String()))
 
@@ -271,6 +283,18 @@ func (n *Node) stepFollower(e types.Event) error {
 			if e.Index < n.queue.lastLogIndex {
 				n.queue.truncateLogTo(e.Index)
 			}
+			n.sendSyncReq()
+			n.advance()
+		}
+	case types.InstallSnapshotResp: // 快照安装返回
+		n.installing = false
+		if e.Reason == types.ReasonOk {
+			n.queue.resetFromSnapshot(e.Index)
+			n.lastTermStartIndex = types.TermStartIndexInfo{
+				Term:  e.LastLogTerm,
+				Index: e.Index,
+			}
+			n.onlySync = false
 			n.sendSyncReq()
 			n.advance()
 		}
@@ -362,6 +386,13 @@ func (n *Node) stepLearner(e types.Event) error {
 			n.truncating = true
 			n.sendTruncateReq(e.Index)
 			n.advance()
+		} else if e.Reason == types.ReasonInstallSnapshot {
+			if n.installing {
+				return nil
+			}
+			n.installing = true
+			n.sendInstallSnapshotReq(e.Index, e.LastLogTerm, e.Logs)
+			n.advance()
 		} else {
 			n.Error("sync error", zap.Uint64("from", e.From), zap.Uint64("index", e.Index), zap.String("reason", e.Reason.String()))
 		}
@@ -371,6 +402,18 @@ func (n *Node) stepLearner(e types.Event) error {
 			if e.Index < n.queue.lastLogIndex {
 				n.queue.truncateLogTo(e.Index)
 			}
+			n.sendSyncReq()
+			n.advance()
+		}
+	case types.InstallSnapshotResp: // 快照安装返回（stepLearner）
+		n.installing = false
+		if e.Reason == types.ReasonOk {
+			n.queue.resetFromSnapshot(e.Index)
+			n.lastTermStartIndex = types.TermStartIndexInfo{
+				Term:  e.LastLogTerm,
+				Index: e.Index,
+			}
+			n.onlySync = false
 			n.sendSyncReq()
 			n.advance()
 		}

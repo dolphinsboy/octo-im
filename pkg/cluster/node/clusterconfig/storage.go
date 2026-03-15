@@ -3,6 +3,7 @@ package clusterconfig
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -174,10 +175,35 @@ func (p *PebbleShardLogStorage) GetState() (types.RaftState, error) {
 		return types.RaftState{}, err
 	}
 
+	snapshotMeta, err := p.GetSnapshotMeta()
+	if err != nil {
+		return types.RaftState{}, err
+	}
+	if snapshotMeta.LastIncludedIndex > lastIndex {
+		lastIndex = snapshotMeta.LastIncludedIndex
+		lastTerm = snapshotMeta.LastIncludedTerm
+	}
+	if snapshotMeta.LastIncludedIndex > applied {
+		applied = snapshotMeta.LastIncludedIndex
+	}
+
+	lastTermStartIndex := uint64(0)
+	if lastTerm > 0 {
+		lastTermStartIndex, err = p.GetTermStartIndex(lastTerm)
+		if err != nil {
+			return types.RaftState{}, err
+		}
+		if snapshotMeta.LastIncludedTerm == lastTerm && snapshotMeta.LastIncludedIndex > lastTermStartIndex {
+			lastTermStartIndex = snapshotMeta.LastIncludedIndex
+		}
+	}
+
 	return types.RaftState{
-		LastLogIndex: lastIndex,
-		LastTerm:     lastTerm,
-		AppliedIndex: applied,
+		LastLogIndex:       lastIndex,
+		LastTerm:           lastTerm,
+		LastTermStartIndex: lastTermStartIndex,
+		AppliedIndex:       applied,
+		CompactedIndex:     snapshotMeta.LastIncludedIndex,
 	}, nil
 }
 
@@ -463,6 +489,97 @@ func (p *PebbleShardLogStorage) DeleteLeaderTermStartIndexGreaterThanTerm(term u
 		}
 	}
 	return batch.Commit(p.wo)
+}
+
+// CompactLogTo 删除 index（含）之前的所有日志条目（头部清理）
+func (p *PebbleShardLogStorage) CompactLogTo(index uint64) error {
+	if index == 0 {
+		return nil
+	}
+	appliedIdx, err := p.AppliedIndex()
+	if err != nil {
+		return err
+	}
+	if index > appliedIdx {
+		return fmt.Errorf("cannot compact beyond applied index: compact=%d, applied=%d", index, appliedIdx)
+	}
+
+	compactedLog, err := p.getLog(index)
+	if err != nil {
+		return err
+	}
+	if compactedLog.Index == 0 {
+		return fmt.Errorf("compact log %d not found", index)
+	}
+
+	if err := p.db.DeleteRange(key.NewLogKey(0), key.NewLogKey(index+1), p.wo); err != nil {
+		return err
+	}
+
+	deleteBeforeTerm := compactedLog.Term
+	nextLog, err := p.getLog(index + 1)
+	if err != nil {
+		return err
+	}
+	if nextLog.Index == 0 || nextLog.Term != compactedLog.Term {
+		deleteBeforeTerm = compactedLog.Term + 1
+	}
+	if deleteBeforeTerm == 0 {
+		return nil
+	}
+
+	return p.db.DeleteRange(
+		key.NewLeaderTermStartIndexKey(0),
+		key.NewLeaderTermStartIndexKey(deleteBeforeTerm),
+		p.wo,
+	)
+}
+
+// SaveSnapshot 保存快照数据
+func (p *PebbleShardLogStorage) SaveSnapshot(snapshot types.SnapshotData) error {
+	data, err := snapshot.Marshal()
+	if err != nil {
+		return err
+	}
+	return p.db.Set(key.NewSnapshotKey(), data, p.wo)
+}
+
+// GetSnapshot 获取最近的快照
+func (p *PebbleShardLogStorage) GetSnapshot() (types.SnapshotData, error) {
+	data, closer, err := p.db.Get(key.NewSnapshotKey())
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return types.SnapshotData{}, nil
+		}
+		return types.SnapshotData{}, err
+	}
+	defer closer.Close()
+
+	result := make([]byte, len(data))
+	copy(result, data)
+
+	var snapshot types.SnapshotData
+	if err := snapshot.Unmarshal(result); err != nil {
+		return types.SnapshotData{}, err
+	}
+	return snapshot, nil
+}
+
+// GetSnapshotMeta 获取快照元数据
+func (p *PebbleShardLogStorage) GetSnapshotMeta() (types.Snapshot, error) {
+	sd, err := p.GetSnapshot()
+	if err != nil {
+		return types.Snapshot{}, err
+	}
+	return sd.Meta, nil
+}
+
+func (p *PebbleShardLogStorage) CreateSnapshot(index uint64) ([]byte, error) {
+	return nil, types.ErrSnapshotNotSupported
+}
+
+func (p *PebbleShardLogStorage) ApplySnapshot(snapshot types.SnapshotData) error {
+	return types.ErrSnapshotNotSupported
 }
 
 func (p *PebbleShardLogStorage) saveMaxIndexWithWriter(index uint64, w pebble.Writer, o *pebble.WriteOptions) error {

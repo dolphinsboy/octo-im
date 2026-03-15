@@ -22,6 +22,14 @@ func (n *Node) Tick() {
 
 func (n *Node) tickLeader() {
 	n.tickHeartbeat()
+	n.tickCompaction()
+}
+
+func (n *Node) tickCompaction() {
+	if !n.opts.CompactionEnabled || n.compacting {
+		return
+	}
+	n.compactionElapsed++
 }
 
 func (n *Node) tickFollower() {

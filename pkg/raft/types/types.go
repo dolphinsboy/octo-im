@@ -22,6 +22,8 @@ const (
 	ReasonTruncate
 	// ReasonOnlySync 只是同步, 不做截断判断
 	ReasonOnlySync
+	// ReasonInstallSnapshot 需要安装快照（请求的日志已被压缩）
+	ReasonInstallSnapshot
 )
 
 func (r Reason) Uint8() uint8 {
@@ -38,6 +40,8 @@ func (r Reason) String() string {
 		return "ReasonTruncate"
 	case ReasonOnlySync:
 		return "ReasonOnlySync"
+	case ReasonInstallSnapshot:
+		return "ReasonInstallSnapshot"
 	default:
 		return fmt.Sprintf("ReasonUnknown[%d]", r)
 	}
@@ -106,6 +110,15 @@ const (
 	ConfigResp
 	// Destory 销毁节点
 	Destory
+
+	// CompactReq 日志压缩请求（本地事件）
+	CompactReq
+	// CompactResp 日志压缩响应（本地事件）
+	CompactResp
+	// InstallSnapshotReq 安装快照请求 leader -> follower
+	InstallSnapshotReq
+	// InstallSnapshotResp 安装快照响应 follower -> leader
+	InstallSnapshotResp
 )
 
 func (e EventType) String() string {
@@ -168,6 +181,14 @@ func (e EventType) String() string {
 		return "ConfigResp"
 	case Destory:
 		return "Destory"
+	case CompactReq:
+		return "CompactReq"
+	case CompactResp:
+		return "CompactResp"
+	case InstallSnapshotReq:
+		return "InstallSnapshotReq"
+	case InstallSnapshotResp:
+		return "InstallSnapshotResp"
 	default:
 		return "Unknown"
 	}
@@ -753,8 +774,12 @@ type RaftState struct {
 	LastLogIndex uint64
 	// LastTerm 最后一个日志的任期
 	LastTerm uint32
+	// LastTermStartIndex 最后一个日志任期在当前可恢复状态下的起始位置
+	LastTermStartIndex uint64
 	// AppliedIndex 已应用的日志下标
 	AppliedIndex uint64
+	// CompactedIndex 已经通过快照压缩掉的最后日志下标
+	CompactedIndex uint64
 }
 
 // ProposeResp 提案返回

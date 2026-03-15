@@ -64,7 +64,7 @@ func (s *storage) CompactLogTo(key string, index uint64) error {
 ### 3.2 wkdb 层新增方法
 
 ```go
-// pkg/wkdb/ 新增
+// pkg/wkdb/v2/ 新增
 
 // CleanLeaderTermStartIndexBefore 清理 index 之前的 Term 起始索引记录
 // 保留 index 对应的 term 及之后的记录

@@ -22,4 +22,17 @@ type IStorage interface {
 	DeleteLeaderTermStartIndexGreaterThanTerm(key string, term uint32) error
 	// SaveConfig 保存配置
 	SaveConfig(key string, cfg types.Config) error
+
+	// CompactLogTo 删除 key 对应的 index（含）之前的所有日志条目（头部清理）
+	CompactLogTo(key string, index uint64) error
+	// SaveSnapshot 保存快照数据
+	SaveSnapshot(key string, snapshot types.SnapshotData) error
+	// GetSnapshot 获取最近的快照（含数据体）
+	GetSnapshot(key string) (types.SnapshotData, error)
+	// GetSnapshotMeta 获取最近快照的元数据（不含数据体）
+	GetSnapshotMeta(key string) (types.Snapshot, error)
+	// CreateSnapshot 创建状态机快照数据
+	CreateSnapshot(key string, index uint64) ([]byte, error)
+	// ApplySnapshot 从快照数据恢复状态机，并使本地 raft 存储切换到快照基线
+	ApplySnapshot(key string, snapshot types.SnapshotData) error
 }

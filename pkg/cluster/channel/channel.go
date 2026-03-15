@@ -5,7 +5,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/raft/raftgroup"
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -37,10 +37,13 @@ func createChannel(cfg wkdb.ChannelClusterConfig, s *Server, rg *raftgroup.RaftG
 		return nil, err
 	}
 
-	lastLogStartIndex, err := s.storage.GetTermStartIndex(channelKey, state.LastTerm)
-	if err != nil {
-		ch.Error("get last term failed", zap.String("channelKey", channelKey), zap.Error(err))
-		return nil, err
+	lastLogStartIndex := state.LastTermStartIndex
+	if state.LastTerm > 0 && lastLogStartIndex == 0 {
+		lastLogStartIndex, err = s.storage.GetTermStartIndex(channelKey, state.LastTerm)
+		if err != nil {
+			ch.Error("get last term failed", zap.String("channelKey", channelKey), zap.Error(err))
+			return nil, err
+		}
 	}
 
 	ch.Node = raft.NewNode(

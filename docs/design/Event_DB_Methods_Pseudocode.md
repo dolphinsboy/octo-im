@@ -43,7 +43,7 @@
 
 ## 3. 建议 Key 组织（Pebble）
 
-按现有 `pkg/wkdb/key` 风格，可新增以下 key 构造器（命名示意）：
+按现有 `pkg/wkdb/v2/key` 风格，可新增以下 key 构造器（命名示意）：
 
 ```go
 func NewMessageLaneStateKey(channelId string, channelType uint8, clientMsgNo, laneID string) []byte

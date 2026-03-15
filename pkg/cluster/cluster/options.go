@@ -6,6 +6,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/auth"
 	"github.com/WuKongIM/WuKongIM/pkg/cluster/node/clusterconfig"
 	"github.com/WuKongIM/WuKongIM/pkg/cluster/node/types"
+	"github.com/WuKongIM/WuKongIM/pkg/cluster/store"
 	"github.com/WuKongIM/WuKongIM/pkg/raft/raftgroup"
 )
 
@@ -58,6 +59,21 @@ type Options struct {
 	AppVersion string
 
 	IsCmdChannel func(channel string) bool
+
+	// SlotCompactionEnabled 是否启用 slot raft 日志压缩
+	SlotCompactionEnabled bool
+	// SlotCompactionIntervalTick slot 压缩检查间隔（tick 次数）
+	SlotCompactionIntervalTick int
+	// SlotCompactionMinLogCount slot 触发压缩的最小日志数
+	SlotCompactionMinLogCount uint64
+	// SlotCompactionRetainCount slot 压缩后保留的最近日志数
+	SlotCompactionRetainCount uint64
+	// OnSlotCreateSnapshot 创建 slot 状态机快照
+	OnSlotCreateSnapshot func(slotId uint32) ([]byte, error)
+	// OnSlotApplySnapshot 恢复 slot 状态机快照
+	OnSlotApplySnapshot func(slotId uint32, data []byte) error
+	// SlotSnapshotBackend 为 slot 状态机提供原始快照导出/恢复能力
+	SlotSnapshotBackend store.SlotSnapshotBackend
 }
 
 func NewOptions(opt ...Option) *Options {
@@ -78,7 +94,11 @@ func NewOptions(opt ...Option) *Options {
 			SlotShardNum:     8,
 			SlotMemTableSize: 16 * 1024 * 1024,
 		},
-		PageSize: 20,
+		PageSize:                   20,
+		SlotCompactionEnabled:      false,
+		SlotCompactionIntervalTick: 2000,
+		SlotCompactionMinLogCount:  10000,
+		SlotCompactionRetainCount:  1000,
 	}
 	for _, o := range opt {
 		o(opts)
@@ -211,5 +231,47 @@ func WithAppVersion(appVersion string) Option {
 func WithIsCmdChannel(isCmdChannel func(channel string) bool) Option {
 	return func(o *Options) {
 		o.IsCmdChannel = isCmdChannel
+	}
+}
+
+func WithSlotCompactionEnabled(enabled bool) Option {
+	return func(o *Options) {
+		o.SlotCompactionEnabled = enabled
+	}
+}
+
+func WithSlotCompactionIntervalTick(interval int) Option {
+	return func(o *Options) {
+		o.SlotCompactionIntervalTick = interval
+	}
+}
+
+func WithSlotCompactionMinLogCount(count uint64) Option {
+	return func(o *Options) {
+		o.SlotCompactionMinLogCount = count
+	}
+}
+
+func WithSlotCompactionRetainCount(count uint64) Option {
+	return func(o *Options) {
+		o.SlotCompactionRetainCount = count
+	}
+}
+
+func WithOnSlotCreateSnapshot(fn func(slotId uint32) ([]byte, error)) Option {
+	return func(o *Options) {
+		o.OnSlotCreateSnapshot = fn
+	}
+}
+
+func WithOnSlotApplySnapshot(fn func(slotId uint32, data []byte) error) Option {
+	return func(o *Options) {
+		o.OnSlotApplySnapshot = fn
+	}
+}
+
+func WithSlotSnapshotBackend(backend store.SlotSnapshotBackend) Option {
+	return func(o *Options) {
+		o.SlotSnapshotBackend = backend
 	}
 }

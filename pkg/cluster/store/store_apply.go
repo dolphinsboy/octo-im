@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"go.uber.org/zap"
 )
 
@@ -292,7 +292,7 @@ func (s *Store) handleAddSubscribers(cmd *CMD) error {
 		s.Error("decode subscribers err", zap.Error(err), zap.String("channelID", channelId), zap.Uint8("channelType", channelType), zap.ByteString("data", cmd.Data))
 		return err
 	}
-	return s.wdb.AddSubscribers(channelId, channelType, members)
+	return s.channelStateStore.AddSubscribers(channelId, channelType, members)
 }
 
 func (s *Store) handleRemoveSubscribers(cmd *CMD) error {
@@ -300,7 +300,7 @@ func (s *Store) handleRemoveSubscribers(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveSubscribers(channelId, channelType, subscribers)
+	return s.channelStateStore.RemoveSubscribers(channelId, channelType, subscribers)
 }
 
 func (s *Store) handleAddUser(cmd *CMD) error {
@@ -308,7 +308,7 @@ func (s *Store) handleAddUser(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddUser(u)
+	return s.userDeviceStore.AddUser(u)
 }
 
 func (s *Store) handleUpdateUser(cmd *CMD) error {
@@ -316,7 +316,7 @@ func (s *Store) handleUpdateUser(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.UpdateUser(u)
+	return s.userDeviceStore.UpdateUser(u)
 }
 
 func (s *Store) handleAddDevice(cmd *CMD) error {
@@ -324,7 +324,7 @@ func (s *Store) handleAddDevice(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddDevice(u)
+	return s.userDeviceStore.AddDevice(u)
 }
 
 func (s *Store) handleUpdateDevice(cmd *CMD) error {
@@ -332,7 +332,7 @@ func (s *Store) handleUpdateDevice(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.UpdateDevice(u)
+	return s.userDeviceStore.UpdateDevice(u)
 }
 
 func (s *Store) handleAddChannelInfo(cmd *CMD) error {
@@ -340,7 +340,7 @@ func (s *Store) handleAddChannelInfo(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.wdb.AddChannel(channelInfo)
+	_, err = s.channelStateStore.AddChannel(channelInfo)
 	return err
 }
 
@@ -349,7 +349,7 @@ func (s *Store) handleUpdateChannel(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	err = s.wdb.UpdateChannel(channelInfo)
+	err = s.channelStateStore.UpdateChannel(channelInfo)
 	return err
 }
 
@@ -358,7 +358,7 @@ func (s *Store) handleRemoveAllSubscriber(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveAllSubscriber(channelId, channelType)
+	return s.channelStateStore.RemoveAllSubscriber(channelId, channelType)
 }
 
 func (s *Store) handleDeleteChannel(cmd *CMD) error {
@@ -366,7 +366,7 @@ func (s *Store) handleDeleteChannel(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.DeleteChannel(channelId, channelType)
+	return s.channelStateStore.DeleteChannel(channelId, channelType)
 }
 
 func (s *Store) handleAddDenylist(cmd *CMD) error {
@@ -374,7 +374,7 @@ func (s *Store) handleAddDenylist(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddDenylist(channelId, channelType, members)
+	return s.channelStateStore.AddDenylist(channelId, channelType, members)
 }
 
 func (s *Store) handleRemoveDenylist(cmd *CMD) error {
@@ -382,7 +382,7 @@ func (s *Store) handleRemoveDenylist(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveDenylist(channelId, channelType, subscribers)
+	return s.channelStateStore.RemoveDenylist(channelId, channelType, subscribers)
 }
 
 func (s *Store) handleRemoveAllDenylist(cmd *CMD) error {
@@ -390,7 +390,7 @@ func (s *Store) handleRemoveAllDenylist(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveAllDenylist(channelId, channelType)
+	return s.channelStateStore.RemoveAllDenylist(channelId, channelType)
 }
 
 func (s *Store) handleAddAllowlist(cmd *CMD) error {
@@ -398,7 +398,7 @@ func (s *Store) handleAddAllowlist(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddAllowlist(channelId, channelType, subscribers)
+	return s.channelStateStore.AddAllowlist(channelId, channelType, subscribers)
 }
 
 func (s *Store) handleRemoveAllowlist(cmd *CMD) error {
@@ -406,7 +406,7 @@ func (s *Store) handleRemoveAllowlist(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveAllowlist(channelId, channelType, subscribers)
+	return s.channelStateStore.RemoveAllowlist(channelId, channelType, subscribers)
 }
 
 func (s *Store) handleRemoveAllAllowlist(cmd *CMD) error {
@@ -414,7 +414,7 @@ func (s *Store) handleRemoveAllAllowlist(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveAllAllowlist(channelId, channelType)
+	return s.channelStateStore.RemoveAllAllowlist(channelId, channelType)
 }
 
 func (s *Store) handleAddOrUpdateUserConversationsForCMDs(cmds []*CMD) error {
@@ -428,7 +428,7 @@ func (s *Store) handleAddOrUpdateUserConversationsForCMDs(cmds []*CMD) error {
 	}
 
 	for uid, conversations := range conversationMap {
-		err := s.wdb.AddOrUpdateConversationsWithUser(uid, conversations)
+		err := s.conversationStore.AddOrUpdateConversationsWithUser(uid, conversations)
 		if err != nil {
 			return err
 		}
@@ -441,7 +441,7 @@ func (s *Store) handleAddOrUpdateUserConversations(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddOrUpdateConversationsWithUser(uid, conversations)
+	return s.conversationStore.AddOrUpdateConversationsWithUser(uid, conversations)
 }
 
 func (s *Store) handleDeleteConversation(cmd *CMD) error {
@@ -449,7 +449,7 @@ func (s *Store) handleDeleteConversation(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.DeleteConversation(uid, deleteChannelID, deleteChannelType)
+	return s.conversationStore.DeleteConversation(uid, deleteChannelID, deleteChannelType)
 }
 
 func (s *Store) handleDeleteConversations(cmd *CMD) error {
@@ -457,7 +457,7 @@ func (s *Store) handleDeleteConversations(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.DeleteConversations(uid, channels)
+	return s.conversationStore.DeleteConversations(uid, channels)
 }
 
 func (s *Store) handleChannelClusterConfigSaves(reqs []*channelCfgReq) error {
@@ -510,7 +510,7 @@ func (s *Store) handleBatchUpdateConversation(cmd *CMD) error {
 				ChannelType:  model.ChannelType,
 				ReadToMsgSeq: seq,
 			}
-			err = s.wdb.AddOrUpdateConversationsWithUser(uid, []wkdb.Conversation{conversation})
+			err = s.conversationStore.AddOrUpdateConversationsWithUser(uid, []wkdb.Conversation{conversation})
 			if err != nil {
 				return err
 			}
@@ -525,7 +525,7 @@ func (s *Store) handleSystemUIDsAdd(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddSystemUids(uids)
+	return s.metaStore.AddSystemUids(uids)
 }
 
 func (s *Store) handleSystemUIDsRemove(cmd *CMD) error {
@@ -533,7 +533,7 @@ func (s *Store) handleSystemUIDsRemove(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveSystemUids(uids)
+	return s.metaStore.RemoveSystemUids(uids)
 }
 
 func (s *Store) handleAddOrUpdateConversations(cmd *CMD) error {
@@ -544,7 +544,7 @@ func (s *Store) handleAddOrUpdateConversations(cmd *CMD) error {
 			zap.Int("dataLen", len(cmd.Data)))
 		return err
 	}
-	return s.wdb.AddOrUpdateConversations(conversations)
+	return s.conversationStore.AddOrUpdateConversations(conversations)
 }
 
 func (s *Store) handleAddOrUpdateTester(cmd *CMD) error {
@@ -552,7 +552,7 @@ func (s *Store) handleAddOrUpdateTester(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddOrUpdateTester(tester)
+	return s.metaStore.AddOrUpdateTester(tester)
 }
 
 func (s *Store) handleRemoveTester(cmd *CMD) error {
@@ -560,7 +560,7 @@ func (s *Store) handleRemoveTester(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemoveTester(no)
+	return s.metaStore.RemoveTester(no)
 }
 
 func (s *Store) handleUpdateUserPluginNo(cmd *CMD) error {
@@ -568,7 +568,7 @@ func (s *Store) handleUpdateUserPluginNo(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.AddOrUpdatePluginUsers([]wkdb.PluginUser{
+	return s.metaStore.AddOrUpdatePluginUsers([]wkdb.PluginUser{
 		pluginUser,
 	})
 }
@@ -578,7 +578,7 @@ func (s *Store) handleRemovePluginUser(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.RemovePluginUser(pluginNo, uid)
+	return s.metaStore.RemovePluginUser(pluginNo, uid)
 }
 
 func (s *Store) handleAddOrUpdateConversationsBatchIfNotExistForCMDs(cmds []*CMD) error {
@@ -593,7 +593,7 @@ func (s *Store) handleAddOrUpdateConversationsBatchIfNotExistForCMDs(cmds []*CMD
 		}
 		conversations = append(conversations, cns...)
 	}
-	return s.wdb.AddOrUpdateConversationsBatchIfNotExist(conversations)
+	return s.conversationStore.AddOrUpdateConversationsBatchIfNotExist(conversations)
 }
 
 func (s *Store) handleAddOrUpdateConversationsBatchIfNotExist(cmd *CMD) error {
@@ -604,7 +604,7 @@ func (s *Store) handleAddOrUpdateConversationsBatchIfNotExist(cmd *CMD) error {
 			zap.Int("dataLen", len(cmd.Data)))
 		return err
 	}
-	return s.wdb.AddOrUpdateConversationsBatchIfNotExist(conversations)
+	return s.conversationStore.AddOrUpdateConversationsBatchIfNotExist(conversations)
 }
 
 func (s *Store) handleUpdateConversationDeletedAtMsgSeq(cmd *CMD) error {
@@ -612,7 +612,7 @@ func (s *Store) handleUpdateConversationDeletedAtMsgSeq(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.UpdateConversationDeletedAtMsgSeq(uid, channelId, channelType, deletedAtMsgSeq)
+	return s.conversationStore.UpdateConversationDeletedAtMsgSeq(uid, channelId, channelType, deletedAtMsgSeq)
 }
 
 func (s *Store) handleAppendMessageEvent(cmd *CMD) error {
@@ -620,7 +620,7 @@ func (s *Store) handleAppendMessageEvent(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = s.wdb.AppendMessageEventWithState(event)
+	_, _, err = s.eventStore.AppendMessageEventWithState(event)
 	return err
 }
 
@@ -645,5 +645,5 @@ func (s *Store) handleUpdateConversationIfSeqGreater(cmd *CMD) error {
 	if err != nil {
 		return err
 	}
-	return s.wdb.UpdateConversationIfSeqGreater(uid, channelId, channelType, readToMsgSeq)
+	return s.conversationStore.UpdateConversationIfSeqGreater(uid, channelId, channelType, readToMsgSeq)
 }

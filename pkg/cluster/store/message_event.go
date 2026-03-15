@@ -3,7 +3,7 @@ package store
 import (
 	"strings"
 
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 )
 
 // AppendMessageEventWithState appends one event through raft proposal and returns persisted event + state.
@@ -36,7 +36,7 @@ func (s *Store) AppendMessageEventWithState(channelId string, channelType uint8,
 	if eventKey == "" {
 		eventKey = wkdb.EventKeyDefault
 	}
-	eventState, err := s.wdb.GetMessageEventState(channelId, channelType, event.ClientMsgNo, eventKey)
+	eventState, err := s.eventStore.GetMessageEventState(channelId, channelType, event.ClientMsgNo, eventKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -50,21 +50,21 @@ func (s *Store) AppendMessageEventWithState(channelId string, channelType uint8,
 }
 
 func (s *Store) GetMessageEventByEventID(channelId string, channelType uint8, clientMsgNo, eventID string) (*wkdb.MessageEvent, error) {
-	return s.wdb.GetMessageEventByEventID(channelId, channelType, clientMsgNo, eventID)
+	return s.eventStore.GetMessageEventByEventID(channelId, channelType, clientMsgNo, eventID)
 }
 
 func (s *Store) ListMessageEvents(channelId string, channelType uint8, clientMsgNo string, fromMsgEventSeq uint64, eventKey string, limit int) ([]wkdb.MessageEvent, error) {
-	return s.wdb.ListMessageEvents(channelId, channelType, clientMsgNo, fromMsgEventSeq, eventKey, limit)
+	return s.eventStore.ListMessageEvents(channelId, channelType, clientMsgNo, fromMsgEventSeq, eventKey, limit)
 }
 
 func (s *Store) GetMessageEventStates(channelId string, channelType uint8, clientMsgNo string) ([]wkdb.MessageEventState, error) {
-	return s.wdb.GetMessageEventStates(channelId, channelType, clientMsgNo)
+	return s.eventStore.GetMessageEventStates(channelId, channelType, clientMsgNo)
 }
 
 func (s *Store) GetMessageEventStatesBatch(channelId string, channelType uint8, clientMsgNos []string) (map[string][]wkdb.MessageEventState, error) {
-	return s.wdb.GetMessageEventStatesBatch(channelId, channelType, clientMsgNos)
+	return s.eventStore.GetMessageEventStatesBatch(channelId, channelType, clientMsgNos)
 }
 
 func (s *Store) GetMessageEventState(channelId string, channelType uint8, clientMsgNo, eventKey string) (*wkdb.MessageEventState, error) {
-	return s.wdb.GetMessageEventState(channelId, channelType, clientMsgNo, eventKey)
+	return s.eventStore.GetMessageEventState(channelId, channelType, clientMsgNo, eventKey)
 }

@@ -60,7 +60,7 @@ func (p *PermissionService) HasPermissionForChannel(channelId string, channelTyp
 	}
 
 	// 查询频道基本信息
-	channelInfo, err := Store.GetChannel(channelId, channelType)
+	channelInfo, err := LoadChannelInfoOrEmpty(channelId, channelType)
 	if err != nil {
 		p.Error("HasPermissionForChannel: GetChannel error", zap.Error(err))
 		return wkproto.ReasonSystemError, err

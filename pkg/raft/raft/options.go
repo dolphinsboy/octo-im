@@ -60,6 +60,15 @@ type Options struct {
 
 	// 空闲多久后销毁
 	DestoryAfterIdleTick int
+
+	// CompactionEnabled 是否启用日志压缩
+	CompactionEnabled bool
+	// CompactionIntervalTick 压缩检查间隔（tick 次数），默认 2000（约 5 分钟）
+	CompactionIntervalTick int
+	// CompactionMinLogCount 触发压缩的最小日志数（appliedIndex - compactedIndex > 此值才触发）
+	CompactionMinLogCount uint64
+	// CompactionRetainCount 压缩后保留的最近日志数，避免频繁触发快照安装
+	CompactionRetainCount uint64
 }
 
 func NewOptions(opt ...Option) *Options {
@@ -80,6 +89,10 @@ func NewOptions(opt ...Option) *Options {
 		AutoSuspend:                false,
 		AutoDestory:                false,
 		DestoryAfterIdleTick:       10 * 60 * 30, // 如果TickInterval是100ms, 那么10 * 60 * 30这个值是30分钟，具体时间根据TickInterval来定
+		CompactionEnabled:          false,
+		CompactionIntervalTick:     2000,
+		CompactionMinLogCount:      10000,
+		CompactionRetainCount:      1000,
 	}
 
 	for _, o := range opt {
@@ -214,5 +227,29 @@ func WithAutoDestory(autoDestory bool) Option {
 
 	return func(opts *Options) {
 		opts.AutoDestory = autoDestory
+	}
+}
+
+func WithCompactionEnabled(enabled bool) Option {
+	return func(opts *Options) {
+		opts.CompactionEnabled = enabled
+	}
+}
+
+func WithCompactionIntervalTick(interval int) Option {
+	return func(opts *Options) {
+		opts.CompactionIntervalTick = interval
+	}
+}
+
+func WithCompactionMinLogCount(count uint64) Option {
+	return func(opts *Options) {
+		opts.CompactionMinLogCount = count
+	}
+}
+
+func WithCompactionRetainCount(count uint64) Option {
+	return func(opts *Options) {
+		opts.CompactionRetainCount = count
 	}
 }

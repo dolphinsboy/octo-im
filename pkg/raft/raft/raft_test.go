@@ -446,6 +446,30 @@ func (s *testStorage) SaveConfig(cfg types.Config) error {
 	return nil
 }
 
+func (s *testStorage) CompactLogTo(index uint64) error {
+	return nil
+}
+
+func (s *testStorage) SaveSnapshot(snapshot types.SnapshotData) error {
+	return nil
+}
+
+func (s *testStorage) GetSnapshot() (types.SnapshotData, error) {
+	return types.SnapshotData{}, nil
+}
+
+func (s *testStorage) GetSnapshotMeta() (types.Snapshot, error) {
+	return types.Snapshot{}, nil
+}
+
+func (s *testStorage) CreateSnapshot(index uint64) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *testStorage) ApplySnapshot(snapshot types.SnapshotData) error {
+	return nil
+}
+
 // 等到某个节点成为领导者
 func waitBecomeLeader(rr ...*raft.Raft) {
 	for {

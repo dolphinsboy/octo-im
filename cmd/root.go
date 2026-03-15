@@ -88,11 +88,70 @@ func initConfig() {
 	if strings.TrimSpace(mode) != "" {
 		serverOpts.Mode = options.Mode(mode)
 	}
+	if topLevelCommand(os.Args[1:]) == "db" {
+		configureDBInspectOptions(vp)
+		installDir = serverOpts.RootDir
+		initialed = true
+		return
+	}
 	serverOpts.ConfigureWithViper(vp)
 
 	installDir = serverOpts.RootDir
 
 	initialed = true
+}
+
+func configureDBInspectOptions(vp *viper.Viper) {
+	if vp == nil {
+		return
+	}
+	rootDir := serverOpts.RootDir
+	if configuredRootDir := strings.TrimSpace(vp.GetString("rootDir")); configuredRootDir != "" {
+		rootDir = configuredRootDir
+	}
+	serverOpts.RootDir = rootDir
+
+	dataDir := strings.TrimSpace(vp.GetString("dataDir"))
+	if dataDir == "" {
+		dataDir = filepath.Join(rootDir, "data")
+	}
+	serverOpts.DataDir = dataDir
+	if slotCount := vp.GetInt("cluster.slotCount"); slotCount > 0 {
+		serverOpts.Cluster.SlotCount = slotCount
+	}
+}
+
+func topLevelCommand(args []string) string {
+	skipValue := false
+	for _, arg := range args {
+		if skipValue {
+			skipValue = false
+			continue
+		}
+		if arg == "--" {
+			break
+		}
+		if strings.HasPrefix(arg, "--") {
+			if !strings.Contains(arg, "=") && longFlagConsumesValue(arg) {
+				skipValue = true
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		return arg
+	}
+	return ""
+}
+
+func longFlagConsumesValue(flag string) bool {
+	switch flag {
+	case "--config", "--mode", "--pingback":
+		return true
+	default:
+		return false
+	}
 }
 
 func cmdRun() error {
@@ -298,6 +357,7 @@ func addCommand(cmd CMD) {
 
 func Execute() {
 	ctx := &WuKongIMContext{}
+	addCommand(newDbCMD(ctx))
 	addCommand(newStopCMD(ctx))
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

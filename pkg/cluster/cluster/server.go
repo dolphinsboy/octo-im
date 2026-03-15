@@ -19,11 +19,13 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/keylock"
 	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	"github.com/WuKongIM/WuKongIM/pkg/trace"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
+	wkdbv3 "github.com/WuKongIM/WuKongIM/pkg/wkdb/v3"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkserver"
 	"github.com/WuKongIM/WuKongIM/pkg/wkserver/proto"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/lni/goutils/syncutil"
 	"github.com/panjf2000/ants/v2"
 	"github.com/panjf2000/gnet/v2"
@@ -94,7 +96,7 @@ func New(opts *Options) *Server {
 	s.rpcServer = newRpcServer(s)
 	s.rpcClient = newRpcClient(s)
 
-	s.db = wkdb.NewWukongDB(
+	legacyDB := wkdb.NewWukongDB(
 		wkdb.NewOptions(
 			wkdb.WithShardNum(opts.DB.WKDbShardNum),
 			wkdb.WithDir(path.Join(opts.DataDir, "db")),
@@ -103,6 +105,31 @@ func New(opts *Options) *Server {
 			wkdb.WithSlotCount(int(opts.ConfigOptions.SlotCount)),
 		),
 	)
+	router, err := wkdbv3.NewStaticBucketRouter(uint32(opts.DB.WKDbShardNum))
+	if err != nil {
+		s.Panic("create wkdb v3 router failed", zap.Error(err))
+	}
+	slotStateDB, err := wkdbv3.NewPebbleDB(wkdbv3.PebbleDBOptions{
+		DataDir:       path.Join(opts.DataDir, "dbv3"),
+		Router:        router,
+		WriteOptions:  pebble.Sync,
+		PebbleOptions: &pebble.Options{FormatMajorVersion: pebble.FormatNewest, MemTableSize: opts.DB.WKDbMemTableSize},
+		ClearSlotCachesFn: func(slotID uint32) {
+		},
+		RebuildDerivedState: func(ctx context.Context, slotID uint32) error {
+			return nil
+		},
+	})
+	if err != nil {
+		s.Panic("create wkdb v3 db failed", zap.Error(err))
+	}
+	routeSlot := func(key string) uint32 {
+		return wkutil.GetSlotNum(int(opts.ConfigOptions.SlotCount), key)
+	}
+	s.db = store.NewHybridDB(legacyDB, slotStateDB, opts.ConfigOptions.SlotCount, routeSlot)
+	messageStore := store.NewLegacyMessageStore(s.db)
+	channelStateStore := store.NewSlotChannelStateStore(slotStateDB, routeSlot)
+	adminSearchStore := store.NewSlotAdminSearchStore(slotStateDB, opts.ConfigOptions.SlotCount, routeSlot)
 
 	// 节点之间通讯的网络服务
 	s.netServer = wkserver.New(
@@ -123,16 +150,24 @@ func New(opts *Options) *Server {
 	//节点事件服务
 	s.eventServer = event.NewServer(s, opts.ConfigOptions, s.cfgServer)
 
-	// 槽分布式服务
-	s.slotServer = slot.NewServer(slot.NewOptions(
+	slotOpts := slot.NewOptions(
 		slot.WithNodeId(opts.ConfigOptions.NodeId),
 		slot.WithDataDir(path.Join(opts.DataDir, "cluster")),
 		slot.WithTransport(opts.SlotTransport),
 		slot.WithNode(s.cfgServer),
 		slot.WithOnApply(s.slotApplyLogs),
 		slot.WithOnSaveConfig(s.onSaveSlotConfig),
+		slot.WithOnCreateSnapshot(opts.OnSlotCreateSnapshot),
+		slot.WithOnApplySnapshot(opts.OnSlotApplySnapshot),
+		slot.WithCompactionEnabled(opts.SlotCompactionEnabled),
+		slot.WithCompactionIntervalTick(opts.SlotCompactionIntervalTick),
+		slot.WithCompactionMinLogCount(opts.SlotCompactionMinLogCount),
+		slot.WithCompactionRetainCount(opts.SlotCompactionRetainCount),
 		slot.WithRPC(s.rpcClient),
-	))
+	)
+
+	// 槽分布式服务
+	s.slotServer = slot.NewServer(slotOpts)
 
 	// 频道分布式服务
 	s.channelServer = channel.NewServer(channel.NewOptions(
@@ -141,7 +176,7 @@ func New(opts *Options) *Server {
 		channel.WithSlot(s.slotServer),
 		channel.WithNode(s.cfgServer),
 		channel.WithCluster(s),
-		channel.WithDB(s.db),
+		channel.WithLogDB(messageStore),
 		channel.WithRPC(s.rpcClient),
 		channel.WithOnSaveConfig(s.onSaveChannelConfig),
 		channel.WithDestoryAfterIdleTick(opts.ConfigOptions.ChannelDestoryAfterIdleTick),
@@ -153,14 +188,34 @@ func New(opts *Options) *Server {
 		store.WithSlot(s.slotServer),
 		store.WithChannel(s.channelServer),
 		store.WithDB(s.db),
+		store.WithChannelStateStore(channelStateStore),
+		store.WithMessageStore(messageStore),
+		store.WithMessageEventStore(s.db),
+		store.WithMetaStore(s.db),
+		store.WithMetaCommandProposer(store.NewSlotZeroMetaCommandProposer(s.slotServer, 0)),
+		store.WithAdminSearchStore(adminSearchStore),
+		store.WithSlotSnapshotBackend(opts.SlotSnapshotBackend),
 		store.WithIsCmdChannel(opts.IsCmdChannel),
 	))
+	s.bindSlotSnapshotCallbacks(slotOpts)
 
 	// 添加事件监听
 	s.cfgServer.AddEventListener(s.slotServer)
 	s.cfgServer.AddEventListener(s)
 
 	return s
+}
+
+func (s *Server) bindSlotSnapshotCallbacks(slotOpts *slot.Options) {
+	if slotOpts == nil || !s.store.SupportsSlotSnapshot() {
+		return
+	}
+	if slotOpts.OnCreateSnapshot == nil {
+		slotOpts.OnCreateSnapshot = s.store.CreateSlotSnapshot
+	}
+	if slotOpts.OnApplySnapshot == nil {
+		slotOpts.OnApplySnapshot = s.store.ApplySlotSnapshot
+	}
 }
 
 func (s *Server) Start() error {

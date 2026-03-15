@@ -302,7 +302,7 @@ go test ./...
 
 ### 性能测试
 ```bash
-go test -bench=. ./pkg/wkdb
+go test -bench=. ./pkg/wkdb/v2
 ```
 
 ### 查看日志

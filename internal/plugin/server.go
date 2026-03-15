@@ -153,7 +153,7 @@ func (s *Server) UserIsAI(uid string) bool {
 	if ok {
 		return isAi
 	}
-	exist, err := service.Store.DB().ExistPluginByUid(uid)
+	exist, err := service.Store.ExistPluginByUid(uid)
 	if err != nil {
 		s.Error("查询用户AI插件失败！", zap.Error(err), zap.String("uid", uid))
 		return false
@@ -167,7 +167,7 @@ func (s *Server) GetUserPluginNo(uid string) (string, error) {
 	if ok {
 		return pluginNo, nil
 	}
-	pluginNo, err := service.Store.DB().GetHighestPriorityPluginByUid(uid)
+	pluginNo, err := service.Store.GetHighestPriorityPluginByUid(uid)
 	if err != nil {
 		s.Error("获取用户AI插件编号失败！", zap.Error(err), zap.String("uid", uid))
 		return "", err

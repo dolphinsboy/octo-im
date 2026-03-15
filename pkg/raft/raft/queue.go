@@ -19,6 +19,7 @@ type queue struct {
 	appending      bool   // 是否在追加中
 	applying       bool   // 是否在应用中
 	appliedIndex   uint64
+	compactedIndex uint64 // 已压缩到此索引（含），此索引之前的日志已不可用
 }
 
 func newQueue(key string, appliedLogIndex, lastLogIndex uint64) *queue {
@@ -214,6 +215,25 @@ func (r *queue) appliedTo(index uint64) {
 		return
 	}
 	r.appliedIndex = index
+}
+
+// compactTo 标记压缩完成，更新 compactedIndex
+func (r *queue) compactTo(logIndex uint64) {
+	if logIndex > r.compactedIndex {
+		r.compactedIndex = logIndex
+	}
+}
+
+// resetFromSnapshot 安装快照后重置队列状态
+func (r *queue) resetFromSnapshot(snapshotIndex uint64) {
+	r.logs = nil
+	r.storedIndex = snapshotIndex
+	r.lastLogIndex = snapshotIndex
+	r.committedIndex = snapshotIndex
+	r.appliedIndex = snapshotIndex
+	r.compactedIndex = snapshotIndex
+	r.appending = false
+	r.applying = false
 }
 
 // truncateLogTo 截取日志到指定日志下标，比如truncateLogTo(6)，如果日志是1 2 3 4 5 6 7 8 9，截取后是1 2 3 4 5 6

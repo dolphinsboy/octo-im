@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/WuKongIM/WuKongIM/pkg/network"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -31,7 +31,7 @@ func (s *Server) conversationSearch(c *wkhttp.Context) {
 	}
 
 	var searchLocalConversations = func() (*conversationRespTotal, error) {
-		conversations, err := s.db.SearchConversation(wkdb.ConversationSearchReq{
+		conversations, err := s.store.SearchConversations(wkdb.ConversationSearchReq{
 			Uid:         uid,
 			Limit:       limit,
 			CurrentPage: currentPage,
@@ -44,7 +44,7 @@ func (s *Server) conversationSearch(c *wkhttp.Context) {
 		conversationResps := make([]*conversationResp, 0, len(conversations))
 
 		for _, conversation := range conversations {
-			lastMsgSeq, _, err := s.db.GetChannelLastMessageSeq(conversation.ChannelId, conversation.ChannelType)
+			lastMsgSeq, err := s.store.GetLastMsgSeq(conversation.ChannelId, conversation.ChannelType)
 			if err != nil {
 				s.Error("GetChannelLastMessageSeq error", zap.Error(err))
 				return nil, err
@@ -56,7 +56,7 @@ func (s *Server) conversationSearch(c *wkhttp.Context) {
 			}
 			conversationResps = append(conversationResps, resp)
 		}
-		count, err := s.db.GetTotalSessionCount()
+		count, err := s.store.CountConversations()
 		if err != nil {
 			s.Error("GetTotalConversationCount error", zap.Error(err))
 			return nil, err

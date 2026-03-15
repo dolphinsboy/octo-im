@@ -2,7 +2,7 @@ package service
 
 import (
 	"github.com/WuKongIM/WuKongIM/internal/eventbus"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
 )
 

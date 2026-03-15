@@ -2,7 +2,7 @@ package store
 
 import (
 	"github.com/WuKongIM/WuKongIM/pkg/cluster/icluster"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 )
 
 type Options struct {
@@ -11,6 +11,17 @@ type Options struct {
 	Slot icluster.Slot
 
 	DB wkdb.DB
+
+	UserDeviceStore     UserDeviceStore
+	ConversationStore   ConversationStore
+	ChannelStateStore   ChannelStateStore
+	MessageStore        MessageStore
+	MessageEventStore   MessageEventStore
+	MetaStore           MetaStore
+	MetaCommandProposer MetaCommandProposer
+	AdminSearchStore    AdminSearchStore
+
+	SlotSnapshotBackend SlotSnapshotBackend
 
 	Channel icluster.Channel
 
@@ -48,6 +59,60 @@ func WithChannel(channel icluster.Channel) Option {
 func WithDB(db wkdb.DB) Option {
 	return func(o *Options) {
 		o.DB = db
+	}
+}
+
+func WithUserDeviceStore(userDeviceStore UserDeviceStore) Option {
+	return func(o *Options) {
+		o.UserDeviceStore = userDeviceStore
+	}
+}
+
+func WithConversationStore(conversationStore ConversationStore) Option {
+	return func(o *Options) {
+		o.ConversationStore = conversationStore
+	}
+}
+
+func WithChannelStateStore(channelStateStore ChannelStateStore) Option {
+	return func(o *Options) {
+		o.ChannelStateStore = channelStateStore
+	}
+}
+
+func WithMessageStore(messageStore MessageStore) Option {
+	return func(o *Options) {
+		o.MessageStore = messageStore
+	}
+}
+
+func WithMessageEventStore(messageEventStore MessageEventStore) Option {
+	return func(o *Options) {
+		o.MessageEventStore = messageEventStore
+	}
+}
+
+func WithMetaStore(metaStore MetaStore) Option {
+	return func(o *Options) {
+		o.MetaStore = metaStore
+	}
+}
+
+func WithMetaCommandProposer(metaCommandProposer MetaCommandProposer) Option {
+	return func(o *Options) {
+		o.MetaCommandProposer = metaCommandProposer
+	}
+}
+
+func WithAdminSearchStore(adminSearchStore AdminSearchStore) Option {
+	return func(o *Options) {
+		o.AdminSearchStore = adminSearchStore
+	}
+}
+
+func WithSlotSnapshotBackend(backend SlotSnapshotBackend) Option {
+	return func(o *Options) {
+		o.SlotSnapshotBackend = backend
 	}
 }
 

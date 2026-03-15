@@ -42,7 +42,7 @@ func (n *Node) sendNotifySync(to uint64) {
 
 func (n *Node) sendSyncReq() {
 
-	if n.truncating || n.syncing { // 如果在截断中，则发起同步没用
+	if n.truncating || n.syncing || n.compacting || n.installing { // 如果在截断、压缩或安装快照中，则发起同步没用
 		return
 	}
 	n.syncing = true
@@ -182,6 +182,29 @@ func (n *Node) sendSyncResp(to uint64, syncIndex uint64, logs []types.Log, reson
 		CommittedIndex: n.queue.committedIndex,
 		Reason:         reson,
 		Speed:          speed,
+	})
+}
+
+func (n *Node) sendInstallSnapshotReq(index uint64, term uint32, logs []types.Log) {
+	n.events = append(n.events, types.Event{
+		Type:        types.InstallSnapshotReq,
+		To:          types.LocalNode,
+		Index:       index,
+		LastLogTerm: term,
+		Logs:        logs,
+	})
+}
+
+func (n *Node) sendCompactReq() {
+	target := n.compactTargetIndex()
+	if target == 0 {
+		n.compacting = false
+		return
+	}
+	n.events = append(n.events, types.Event{
+		Type:  types.CompactReq,
+		To:    types.LocalNode,
+		Index: target,
 	})
 }
 

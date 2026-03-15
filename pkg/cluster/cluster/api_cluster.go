@@ -13,7 +13,7 @@ import (
 	pb "github.com/WuKongIM/WuKongIM/pkg/cluster/node/types"
 	"github.com/WuKongIM/WuKongIM/pkg/network"
 	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -332,7 +332,7 @@ func (s *Server) channelReplicas(c *wkhttp.Context) {
 
 		if replicaId == s.opts.ConfigOptions.NodeId {
 			running := s.channelServer.ExistChannel(channelId, channelType)
-			lastMsgSeq, lastTime, err := s.db.GetChannelLastMessageSeq(channelId, channelType)
+			lastMsgSeq, lastTime, err := s.store.GetChannelLastMessageSeqAndTime(channelId, channelType)
 			if err != nil {
 				s.Error("GetChannelLastMessageSeq error", zap.Error(err))
 				c.ResponseError(err)
@@ -483,7 +483,7 @@ func (s *Server) channelLocalReplica(c *wkhttp.Context) {
 
 	running := s.channelServer.ExistChannel(channelId, channelType)
 
-	lastMsgSeq, lastTime, err := s.db.GetChannelLastMessageSeq(channelId, channelType)
+	lastMsgSeq, lastTime, err := s.store.GetChannelLastMessageSeqAndTime(channelId, channelType)
 	if err != nil {
 		s.Error("GetChannelLastMessageSeq error", zap.Error(err))
 		c.ResponseError(err)

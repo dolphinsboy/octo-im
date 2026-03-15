@@ -264,9 +264,18 @@ func (rg *RaftGroup) handleReady(r IRaft) bool {
 		case types.TruncateReq: // 处理截断请求
 			r.KeepAlive()
 			rg.handleTruncateReq(r, e)
+			continue
 		case types.ApplyReq: // 处理应用请求
 			r.KeepAlive()
 			rg.handleApplyReq(r, e)
+			continue
+		case types.CompactReq: // 处理压缩请求
+			r.KeepAlive()
+			rg.handleCompactReq(r, e)
+			continue
+		case types.InstallSnapshotReq: // 处理快照安装请求（Follower 本地事件）
+			r.KeepAlive()
+			rg.handleInstallSnapshotReq(r, e)
 			continue
 		case types.Destory: // 处理销毁请求
 			rg.handleDestory(r)

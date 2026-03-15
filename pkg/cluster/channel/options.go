@@ -4,8 +4,22 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/cluster/icluster"
 	"github.com/WuKongIM/WuKongIM/pkg/raft/raftgroup"
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 )
+
+type ChannelLogStore interface {
+	GetLastMsg(channelId string, channelType uint8) (wkdb.Message, error)
+	AppendMessages(channelId string, channelType uint8, msgs []wkdb.Message) error
+	LoadNextRangeMsgsForSize(channelId string, channelType uint8, startMessageSeq, endMessageSeq, limitSize uint64) ([]wkdb.Message, error)
+	TruncateLogTo(channelId string, channelType uint8, messageSeq uint64) error
+	GetChannelLastMessageSeq(channelId string, channelType uint8) (seq uint64, lastTime uint64, err error)
+
+	SetLeaderTermStartIndex(shardNo string, term uint32, index uint64) error
+	LeaderTermStartIndex(shardNo string, term uint32) (uint64, error)
+	LeaderLastTerm(shardNo string) (uint32, error)
+	LeaderLastTermGreaterEqThan(shardNo string, term uint32) (uint32, error)
+	DeleteLeaderTermStartIndexGreaterThanTerm(shardNo string, term uint32) error
+}
 
 type Options struct {
 	// 节点ID
@@ -14,8 +28,8 @@ type Options struct {
 	Slot icluster.Slot
 	// 节点接口
 	Node icluster.Node
-	// 存储
-	DB wkdb.DB
+	// 频道日志和相关 raft 元数据存储
+	LogDB ChannelLogStore
 	// 分布式接口
 	Cluster icluster.ICluster
 	// api接口
@@ -74,9 +88,9 @@ func WithTransport(transport raftgroup.ITransport) Option {
 	}
 }
 
-func WithDB(db wkdb.DB) Option {
+func WithLogDB(db ChannelLogStore) Option {
 	return func(o *Options) {
-		o.DB = db
+		o.LogDB = db
 	}
 }
 

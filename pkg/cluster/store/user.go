@@ -1,7 +1,7 @@
 package store
 
 import (
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
 	"go.uber.org/zap"
 )
@@ -22,7 +22,7 @@ func (s *Store) AddUser(u wkdb.User) error {
 }
 
 func (s *Store) GetUser(uid string) (wkdb.User, error) {
-	return s.wdb.GetUser(uid)
+	return s.userDeviceStore.GetUser(uid)
 }
 
 func (s *Store) UpdateUser(u wkdb.User) error {
@@ -67,11 +67,11 @@ func (s *Store) AddDevice(d wkdb.Device) error {
 }
 
 func (s *Store) GetDevice(uid string, deviceFlag wkproto.DeviceFlag) (wkdb.Device, error) {
-	return s.wdb.GetDevice(uid, uint64(deviceFlag))
+	return s.userDeviceStore.GetDevice(uid, uint64(deviceFlag))
 }
 
 func (s *Store) GetSystemUids() ([]string, error) {
-	return s.wdb.GetSystemUids()
+	return s.metaStore.GetSystemUids()
 }
 
 func (s *Store) AddSystemUids(uids []string) error {
@@ -82,9 +82,7 @@ func (s *Store) AddSystemUids(uids []string) error {
 	if err != nil {
 		return err
 	}
-	var slotId uint32 = 0 // 系统uid默认存储在slot 0上
-	_, err = s.opts.Slot.ProposeUntilApplied(slotId, cmdData)
-	return err
+	return s.metaCommandProposer.ProposeMetaCommandUntilApplied(cmdData)
 }
 
 func (s *Store) RemoveSystemUids(uids []string) error {
@@ -94,7 +92,5 @@ func (s *Store) RemoveSystemUids(uids []string) error {
 	if err != nil {
 		return err
 	}
-	var slotId uint32 = 0 // 系统uid默认存储在slot 0上
-	_, err = s.opts.Slot.ProposeUntilApplied(slotId, cmdData)
-	return err
+	return s.metaCommandProposer.ProposeMetaCommandUntilApplied(cmdData)
 }

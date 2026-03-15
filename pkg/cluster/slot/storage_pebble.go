@@ -11,7 +11,7 @@ import (
 
 	"github.com/WuKongIM/WuKongIM/pkg/cluster/slot/key"
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/cockroachdb/pebble"
 	"github.com/lni/goutils/syncutil"
@@ -161,6 +161,18 @@ func (p *PebbleShardLogStorage) GetState(shardNo string) (types.RaftState, error
 		return types.RaftState{}, err
 	}
 
+	snapshotMeta, err := p.GetSnapshotMeta(shardNo)
+	if err != nil {
+		return types.RaftState{}, err
+	}
+	if snapshotMeta.LastIncludedIndex > lastLogIndex {
+		lastLogIndex = snapshotMeta.LastIncludedIndex
+		lastLogTerm = snapshotMeta.LastIncludedTerm
+	}
+	if snapshotMeta.LastIncludedIndex > applied {
+		applied = snapshotMeta.LastIncludedIndex
+	}
+
 	// 检测并修复不一致状态：appliedIndex > lastLogIndex
 	// 这种情况可能由 Apply 和 Truncate 并发执行导致
 	if applied > lastLogIndex {
@@ -180,10 +192,23 @@ func (p *PebbleShardLogStorage) GetState(shardNo string) (types.RaftState, error
 			zap.Uint64("newAppliedIndex", applied))
 	}
 
+	lastTermStartIndex := uint64(0)
+	if lastLogTerm > 0 {
+		lastTermStartIndex, err = p.GetTermStartIndex(shardNo, lastLogTerm)
+		if err != nil {
+			return types.RaftState{}, err
+		}
+		if snapshotMeta.LastIncludedTerm == lastLogTerm && snapshotMeta.LastIncludedIndex > lastTermStartIndex {
+			lastTermStartIndex = snapshotMeta.LastIncludedIndex
+		}
+	}
+
 	return types.RaftState{
-		LastLogIndex: lastLogIndex,
-		LastTerm:     lastLogTerm,
-		AppliedIndex: applied,
+		LastLogIndex:       lastLogIndex,
+		LastTerm:           lastLogTerm,
+		LastTermStartIndex: lastTermStartIndex,
+		AppliedIndex:       applied,
+		CompactedIndex:     snapshotMeta.LastIncludedIndex,
 	}, nil
 }
 
@@ -604,6 +629,169 @@ func (p *PebbleShardLogStorage) DeleteLeaderTermStartIndexGreaterThanTerm(shardN
 			return err
 		}
 	}
+	return batch.Commit(p.sync)
+}
+
+// deleteLeaderTermStartIndexLessThanTerm 删除小于 term 的 LeaderTermStartIndex 记录
+func (p *PebbleShardLogStorage) deleteLeaderTermStartIndexLessThanTerm(shardNo string, term uint32) error {
+	if term == 0 {
+		return nil
+	}
+	return p.shardDB(shardNo).DeleteRange(
+		key.NewLeaderTermStartIndexKey(shardNo, 0),
+		key.NewLeaderTermStartIndexKey(shardNo, term),
+		p.sync,
+	)
+}
+
+// CompactLogTo 删除 index（含）之前的所有日志条目（头部清理）
+func (p *PebbleShardLogStorage) CompactLogTo(shardNo string, index uint64) error {
+	if index == 0 {
+		return nil
+	}
+
+	shardId := p.shardId(shardNo)
+	p.shardLocks[shardId].Lock()
+	defer p.shardLocks[shardId].Unlock()
+
+	// 安全检查：不能清理未应用的日志
+	appliedIdx, err := p.AppliedIndex(shardNo)
+	if err != nil {
+		return err
+	}
+	if index > appliedIdx {
+		return fmt.Errorf("cannot compact beyond applied index: compact=%d, applied=%d", index, appliedIdx)
+	}
+
+	compactedLog, err := p.getLog(shardNo, index)
+	if err != nil {
+		return err
+	}
+	if compactedLog.Index == 0 {
+		return fmt.Errorf("compact log %d not found", index)
+	}
+
+	// 删除 [0, index] 范围内的日志
+	err = p.shardDB(shardNo).DeleteRange(
+		key.NewLogKey(shardNo, 0),
+		key.NewLogKey(shardNo, index+1),
+		p.sync,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 清理已压缩日志对应的旧 LeaderTermStartIndex 记录
+	// 若压缩点之后仍有同任期日志，需要保留该任期的起点。
+	deleteBeforeTerm := compactedLog.Term
+	nextLog, err := p.getLog(shardNo, index+1)
+	if err != nil {
+		return err
+	}
+	if nextLog.Index == 0 || nextLog.Term != compactedLog.Term {
+		deleteBeforeTerm = compactedLog.Term + 1
+	}
+	if deleteBeforeTerm > 0 {
+		err = p.deleteLeaderTermStartIndexLessThanTerm(shardNo, deleteBeforeTerm)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// SaveSnapshot 保存快照数据到 Pebble
+func (p *PebbleShardLogStorage) SaveSnapshot(shardNo string, snapshot types.SnapshotData) error {
+	data, err := snapshot.Marshal()
+	if err != nil {
+		return err
+	}
+	snapshotKey := key.NewSnapshotKey(shardNo)
+	return p.shardDB(shardNo).Set(snapshotKey, data, p.sync)
+}
+
+// GetSnapshot 获取最近的快照（含数据体）
+func (p *PebbleShardLogStorage) GetSnapshot(shardNo string) (types.SnapshotData, error) {
+	snapshotKey := key.NewSnapshotKey(shardNo)
+	data, closer, err := p.shardDB(shardNo).Get(snapshotKey)
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return types.SnapshotData{}, nil
+		}
+		return types.SnapshotData{}, err
+	}
+	defer closer.Close()
+
+	result := make([]byte, len(data))
+	copy(result, data)
+
+	var snapshot types.SnapshotData
+	if err := snapshot.Unmarshal(result); err != nil {
+		return types.SnapshotData{}, err
+	}
+	return snapshot, nil
+}
+
+// GetSnapshotMeta 获取最近快照的元数据（不含数据体）
+func (p *PebbleShardLogStorage) GetSnapshotMeta(shardNo string) (types.Snapshot, error) {
+	sd, err := p.GetSnapshot(shardNo)
+	if err != nil {
+		return types.Snapshot{}, err
+	}
+	return sd.Meta, nil
+}
+
+// CreateSnapshot 创建状态机快照数据
+func (p *PebbleShardLogStorage) CreateSnapshot(shardNo string, index uint64) ([]byte, error) {
+	if p.s.opts.OnCreateSnapshot == nil {
+		return nil, types.ErrSnapshotNotSupported
+	}
+	slotId := KeyToSlotId(shardNo)
+	return p.s.opts.OnCreateSnapshot(slotId)
+}
+
+// ApplySnapshot 从快照数据恢复状态机，并将本地 raft 存储切换到快照基线。
+func (p *PebbleShardLogStorage) ApplySnapshot(shardNo string, snapshot types.SnapshotData) error {
+	shardId := p.shardId(shardNo)
+	p.shardLocks[shardId].Lock()
+	defer p.shardLocks[shardId].Unlock()
+
+	if len(snapshot.Data) > 0 {
+		if p.s.opts.OnApplySnapshot == nil {
+			return types.ErrSnapshotNotSupported
+		}
+		slotId := KeyToSlotId(shardNo)
+		if err := p.s.opts.OnApplySnapshot(slotId, snapshot.Data); err != nil {
+			return err
+		}
+	}
+
+	batch := p.shardDB(shardNo).NewBatch()
+	defer batch.Close()
+
+	if err := batch.DeleteRange(key.NewLogKey(shardNo, 0), key.NewLogKey(shardNo, math.MaxUint64), p.noSync); err != nil {
+		return err
+	}
+	if err := batch.DeleteRange(key.NewLeaderTermStartIndexKey(shardNo, 0), key.NewLeaderTermStartIndexKey(shardNo, math.MaxUint32), p.noSync); err != nil {
+		return err
+	}
+	if snapshot.Meta.LastIncludedTerm > 0 {
+		indexData := make([]byte, 8)
+		binary.BigEndian.PutUint64(indexData, snapshot.Meta.LastIncludedIndex)
+		if err := batch.Set(key.NewLeaderTermStartIndexKey(shardNo, snapshot.Meta.LastIncludedTerm), indexData, p.noSync); err != nil {
+			return err
+		}
+	}
+
+	appliedIndexData := make([]byte, 8)
+	binary.BigEndian.PutUint64(appliedIndexData, snapshot.Meta.LastIncludedIndex)
+	appliedTimeData := make([]byte, 8)
+	binary.BigEndian.PutUint64(appliedTimeData, uint64(time.Now().UnixNano()))
+	if err := batch.Set(key.NewAppliedIndexKey(shardNo), append(appliedIndexData, appliedTimeData...), p.noSync); err != nil {
+		return err
+	}
+
 	return batch.Commit(p.sync)
 }
 

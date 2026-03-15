@@ -13,7 +13,7 @@
 - `go run main.go --config ./exampleconfig/cluster1.yaml` starts a cluster node with explicit config.
 - `go build -o wukongim main.go` builds the server binary.
 - `go test ./...` runs all Go tests.
-- `go test -bench=. ./pkg/wkdb` runs database benchmarks.
+- `go test -bench=. ./pkg/wkdb/v2` runs database benchmarks.
 - `cd docker/cluster && docker compose up -d` launches a local multi-node environment.
 - `cd web && yarn dev` starts frontend dev server; `yarn build` performs type-check + production build.
 
@@ -24,7 +24,7 @@
 
 ## Testing Guidelines
 - Name tests with Go defaults: files `*_test.go`, functions `TestXxx`, benchmarks `BenchmarkXxx`.
-- Add/adjust tests for every behavior change, especially in storage (`pkg/wkdb`), protocol, and cluster paths.
+- Add/adjust tests for every behavior change, especially in storage (`pkg/wkdb/v2`), protocol, and cluster paths.
 - Run `go test ./...` before pushing; run targeted package tests while iterating for faster feedback.
 
 ## Commit & Pull Request Guidelines

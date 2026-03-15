@@ -460,6 +460,30 @@ func (t *testStorage) SaveConfig(key string, cfg types.Config) error {
 	return nil
 }
 
+func (t *testStorage) CompactLogTo(key string, index uint64) error {
+	return nil
+}
+
+func (t *testStorage) SaveSnapshot(key string, snapshot types.SnapshotData) error {
+	return nil
+}
+
+func (t *testStorage) GetSnapshot(key string) (types.SnapshotData, error) {
+	return types.SnapshotData{}, nil
+}
+
+func (t *testStorage) GetSnapshotMeta(key string) (types.Snapshot, error) {
+	return types.Snapshot{}, nil
+}
+
+func (t *testStorage) CreateSnapshot(key string, index uint64) ([]byte, error) {
+	return nil, nil
+}
+
+func (t *testStorage) ApplySnapshot(key string, snapshot types.SnapshotData) error {
+	return nil
+}
+
 func (t *testStorage) GetConfig(key string) (types.Config, error) {
 	return types.Config{}, nil
 }

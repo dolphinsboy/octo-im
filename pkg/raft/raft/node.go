@@ -50,6 +50,11 @@ type Node struct {
 
 	syncing             bool // 正在同步
 	syncRespTimeoutTick int  // 同步响应超时计数
+
+	compacting        bool // 压缩中
+	compactionElapsed int  // 压缩计时器
+
+	installing bool // 快照安装中
 }
 
 func NewNode(lastTermStartLogIndex uint64, raftState types.RaftState, opts *Options) *Node {
@@ -71,6 +76,7 @@ func NewNode(lastTermStartLogIndex uint64, raftState types.RaftState, opts *Opti
 	}
 	// 初始化日志队列
 	n.queue = newQueue(opts.Key, raftState.AppliedIndex, raftState.LastLogIndex)
+	n.queue.compactedIndex = raftState.CompactedIndex
 
 	// 初始化选举状态
 	n.votes = make(map[uint64]bool)
@@ -164,9 +170,47 @@ func (n *Node) Ready() []types.Event {
 		}
 	}
 
+	if n.shouldCompact() {
+		n.compacting = true
+		n.compactionElapsed = 0
+		n.sendCompactReq()
+	}
+
 	events := n.events
 	n.events = n.events[:0]
 	return events
+}
+
+// shouldCompact 判断是否应该触发压缩
+func (n *Node) shouldCompact() bool {
+	if !n.opts.CompactionEnabled {
+		return false
+	}
+	if n.compacting {
+		return false
+	}
+	if !n.IsLeader() {
+		return false
+	}
+	if n.compactionElapsed < n.opts.CompactionIntervalTick {
+		return false
+	}
+	if n.queue.appliedIndex-n.queue.compactedIndex < n.opts.CompactionMinLogCount {
+		return false
+	}
+	return true
+}
+
+// compactTargetIndex 计算压缩目标索引
+func (n *Node) compactTargetIndex() uint64 {
+	if n.queue.appliedIndex <= n.opts.CompactionRetainCount {
+		return 0
+	}
+	target := n.queue.appliedIndex - n.opts.CompactionRetainCount
+	if target <= n.queue.compactedIndex {
+		return 0
+	}
+	return target
 }
 
 func (n *Node) LeaderId() uint64 {

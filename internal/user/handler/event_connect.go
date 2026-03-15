@@ -9,7 +9,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/internal/options"
 	"github.com/WuKongIM/WuKongIM/internal/service"
 	"github.com/WuKongIM/WuKongIM/pkg/fasttime"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wknet"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
@@ -94,7 +94,7 @@ func (h *Handler) handleConnect(event *eventbus.Event) (wkproto.ReasonCode, *wkp
 	}
 
 	// -------------------- ban  --------------------
-	userChannelInfo, err := service.Store.GetChannel(uid, wkproto.ChannelTypePerson)
+	userChannelInfo, err := service.LoadChannelInfoOrEmpty(uid, wkproto.ChannelTypePerson)
 	if err != nil {
 		h.Error("get device channel info err", zap.Error(err))
 		return wkproto.ReasonAuthFail, nil, err

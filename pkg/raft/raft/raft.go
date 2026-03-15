@@ -41,9 +41,12 @@ func New(opts *Options) *Raft {
 		panic(fmt.Sprintf("get state failed, err:%v", err))
 	}
 
-	lastTermStartLogIndex, err := opts.Storage.GetTermStartIndex(raftState.LastTerm)
-	if err != nil {
-		panic(fmt.Sprintf("get term start index failed, err:%v", err))
+	lastTermStartLogIndex := raftState.LastTermStartIndex
+	if raftState.LastTerm > 0 && lastTermStartLogIndex == 0 {
+		lastTermStartLogIndex, err = opts.Storage.GetTermStartIndex(raftState.LastTerm)
+		if err != nil {
+			panic(fmt.Sprintf("get term start index failed, err:%v", err))
+		}
 	}
 
 	pool, err := ants.NewPool(opts.GoPoolSize, ants.WithNonblocking(true))
@@ -236,6 +239,14 @@ func (r *Raft) readyEvents() {
 			r.node.KeepAlive()
 			r.handleApplyReq(e)
 			continue
+		case types.CompactReq: // 处理压缩请求
+			r.node.KeepAlive()
+			r.handleCompactReq(e)
+			continue
+		case types.InstallSnapshotReq: // 处理快照安装请求（Follower 本地事件）
+			r.node.KeepAlive()
+			r.handleInstallSnapshotReq(e)
+			continue
 			// 角色转换
 		case types.LearnerToFollowerReq,
 			types.LearnerToLeaderReq,
@@ -320,6 +331,25 @@ func (r *Raft) handleGetLogsReq(e types.Event) {
 				Type:   types.GetLogsResp,
 				Index:  trunctIndex,
 				Reason: types.ReasonTruncate,
+			}}
+			return
+		}
+
+		// 检查日志是否已被压缩，如果是则发送完整快照
+		snapshot, snapErr := r.opts.Storage.GetSnapshot()
+		if snapErr == nil && !snapshot.Meta.IsEmpty() && e.Index <= snapshot.Meta.LastIncludedIndex {
+			snapshotLog := types.Log{
+				Index: snapshot.Meta.LastIncludedIndex,
+				Term:  snapshot.Meta.LastIncludedTerm,
+				Data:  snapshot.Data,
+			}
+			r.stepC <- stepReq{event: types.Event{
+				To:          e.From,
+				Type:        types.GetLogsResp,
+				Index:       snapshot.Meta.LastIncludedIndex,
+				LastLogTerm: snapshot.Meta.LastIncludedTerm,
+				Logs:        []types.Log{snapshotLog},
+				Reason:      types.ReasonInstallSnapshot,
 			}}
 			return
 		}
@@ -437,6 +467,139 @@ func (r *Raft) handleApplyReq(e types.Event) {
 		r.Error("submit apply logs failed", zap.Error(err))
 		r.stepC <- stepReq{event: types.Event{
 			Type:   types.ApplyResp,
+			Reason: types.ReasonError,
+		}}
+	}
+}
+
+func (r *Raft) handleCompactReq(e types.Event) {
+	err := r.pool.Submit(func() {
+		logs, err := r.opts.Storage.GetLogs(e.Index, e.Index+1, 0)
+		if err != nil {
+			r.Error("load compact log failed", zap.Error(err), zap.Uint64("index", e.Index))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+		if len(logs) == 0 {
+			r.Error("compact log not found", zap.Uint64("index", e.Index))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+
+		// 1. 创建状态机快照数据
+		data, err := r.opts.Storage.CreateSnapshot(e.Index)
+		if err != nil {
+			r.Error("create snapshot failed", zap.Error(err))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+
+		// 2. 保存完整快照（元数据 + 状态数据），先写快照后删日志确保崩溃安全
+		snapshotData := types.SnapshotData{
+			Meta: types.Snapshot{
+				LastIncludedIndex: e.Index,
+				LastIncludedTerm:  logs[0].Term,
+				Config:            r.node.Config().Clone(),
+				Size:              uint64(len(data)),
+				CreatedAt:         time.Now().UnixNano(),
+			},
+			Data: data,
+		}
+		err = r.opts.Storage.SaveSnapshot(snapshotData)
+		if err != nil {
+			r.Error("save snapshot failed", zap.Error(err))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+
+		err = r.opts.Storage.CompactLogTo(e.Index)
+		if err != nil {
+			r.Error("compact log failed", zap.Error(err))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.CompactResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+
+		r.Info("compact log completed", zap.Uint64("compactIndex", e.Index))
+		r.stepC <- stepReq{event: types.Event{
+			Type:   types.CompactResp,
+			Index:  e.Index,
+			Reason: types.ReasonOk,
+		}}
+	})
+	if err != nil {
+		r.Error("submit compact req failed", zap.Error(err))
+		r.stepC <- stepReq{event: types.Event{
+			Type:   types.CompactResp,
+			Reason: types.ReasonError,
+		}}
+	}
+}
+
+func (r *Raft) handleInstallSnapshotReq(e types.Event) {
+	err := r.pool.Submit(func() {
+		var snapshotData []byte
+		if len(e.Logs) > 0 {
+			snapshotData = e.Logs[0].Data
+		}
+
+		// 1. 保存快照到本地存储
+		sd := types.SnapshotData{
+			Meta: types.Snapshot{
+				LastIncludedIndex: e.Index,
+				LastIncludedTerm:  e.LastLogTerm,
+			},
+			Data: snapshotData,
+		}
+		err := r.opts.Storage.SaveSnapshot(sd)
+		if err != nil {
+			r.Error("install snapshot: save failed", zap.Error(err))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.InstallSnapshotResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+
+		// 2. 恢复状态机
+		err = r.opts.Storage.ApplySnapshot(sd)
+		if err != nil {
+			r.Error("install snapshot: apply failed", zap.Error(err))
+			r.stepC <- stepReq{event: types.Event{
+				Type:   types.InstallSnapshotResp,
+				Reason: types.ReasonError,
+			}}
+			return
+		}
+
+		r.Info("install snapshot completed",
+			zap.Uint64("snapshotIndex", e.Index),
+			zap.Uint32("snapshotTerm", e.LastLogTerm))
+		r.stepC <- stepReq{event: types.Event{
+			Type:        types.InstallSnapshotResp,
+			Index:       e.Index,
+			LastLogTerm: e.LastLogTerm,
+			Reason:      types.ReasonOk,
+		}}
+	})
+	if err != nil {
+		r.Error("submit install snapshot req failed", zap.Error(err))
+		r.stepC <- stepReq{event: types.Event{
+			Type:   types.InstallSnapshotResp,
 			Reason: types.ReasonError,
 		}}
 	}

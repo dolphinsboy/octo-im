@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -147,7 +147,7 @@ func (s *Server) nodeChannelsGet(c *wkhttp.Context) {
 		return
 	}
 
-	channelClusterConfigs, err := s.db.SearchChannelClusterConfig(wkdb.ChannelClusterConfigSearchReq{
+	channelClusterConfigs, err := s.store.SearchChannelClusterConfigs(wkdb.ChannelClusterConfigSearchReq{
 		ChannelId:       channelId,
 		ChannelType:     channelType,
 		OffsetCreatedAt: offsetCreatedAt,

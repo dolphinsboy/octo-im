@@ -2,19 +2,19 @@ package channel
 
 import (
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
 )
 
 type storage struct {
-	db wkdb.DB
+	db ChannelLogStore
 	s  *Server
 	wklog.Log
 }
 
-func newStorage(db wkdb.DB, s *Server) *storage {
+func newStorage(db ChannelLogStore, s *Server) *storage {
 	return &storage{db: db, s: s, Log: wklog.NewWKLog("channel_storage")}
 }
 
@@ -161,4 +161,29 @@ func (s *storage) LastIndexAndAppendTime(shardNo string) (uint64, uint64, error)
 func (s *storage) getLastMessage(channelId string, channelType uint8) (wkdb.Message, error) {
 
 	return s.db.GetLastMsg(channelId, channelType)
+}
+
+// CompactLogTo Channel 当前未支持独立 raft 日志压缩，避免误删消息数据。
+func (s *storage) CompactLogTo(key string, index uint64) error {
+	return types.ErrCompactionNotSupported
+}
+
+func (s *storage) SaveSnapshot(key string, snapshot types.SnapshotData) error {
+	return types.ErrSnapshotNotSupported
+}
+
+func (s *storage) GetSnapshot(key string) (types.SnapshotData, error) {
+	return types.SnapshotData{}, nil
+}
+
+func (s *storage) GetSnapshotMeta(key string) (types.Snapshot, error) {
+	return types.Snapshot{}, nil
+}
+
+func (s *storage) CreateSnapshot(key string, index uint64) ([]byte, error) {
+	return nil, types.ErrSnapshotNotSupported
+}
+
+func (s *storage) ApplySnapshot(key string, snapshot types.SnapshotData) error {
+	return types.ErrSnapshotNotSupported
 }

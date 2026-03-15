@@ -7,7 +7,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/raft/raftgroup"
 	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	"github.com/WuKongIM/WuKongIM/pkg/ringlock"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -34,7 +34,7 @@ func NewServer(opts *Options) *Server {
 		Log:            wklog.NewWKLog("channel.Server"),
 		wakeLeaderLock: ringlock.NewRingLock(1024),
 	}
-	s.storage = newStorage(opts.DB, s)
+	s.storage = newStorage(opts.LogDB, s)
 	for i := 0; i < opts.GroupCount; i++ {
 		rg := raftgroup.New(
 			raftgroup.NewOptions(

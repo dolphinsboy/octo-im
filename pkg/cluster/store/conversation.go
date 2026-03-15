@@ -2,10 +2,10 @@ package store
 
 import (
 	"context"
+	"sort"
 	"time"
 
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
-	wkproto "github.com/WuKongIM/WuKongIMGoProto"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -14,7 +14,11 @@ func (s *Store) AddOrUpdateConversations(conversations []wkdb.Conversation) erro
 	// 将会话按照slotId来分组
 	slotConversationsMap := make(map[uint32][]wkdb.Conversation)
 
-	for _, c := range conversations {
+	for i, c := range conversations {
+		if c.Id == 0 {
+			conversations[i].Id = s.NextPrimaryKey()
+			c = conversations[i]
+		}
 		slotId := s.opts.Slot.GetSlotId(c.Uid)
 		slotConversationsMap[slotId] = append(slotConversationsMap[slotId], c)
 	}
@@ -62,7 +66,7 @@ func (s *Store) AddOrUpdateUserConversations(uid string, conversations []wkdb.Co
 	}
 	for i, c := range conversations {
 		if c.Id == 0 {
-			conversations[i].Id = s.wdb.NextPrimaryKey() // 如果id为0，生成一个新的id
+			conversations[i].Id = s.NextPrimaryKey() // 如果id为0，生成一个新的id
 		}
 	}
 	data, err := EncodeCMDAddOrUpdateUserConversations(uid, conversations)
@@ -86,7 +90,7 @@ func (s *Store) AddConversationsIfNotExist(conversations []wkdb.Conversation) er
 	slotConversationsMap := make(map[uint32][]wkdb.Conversation)
 
 	for _, c := range conversations {
-		exist, err := s.wdb.ExistConversation(c.Uid, c.ChannelId, c.ChannelType)
+		exist, err := s.conversationStore.ExistConversation(c.Uid, c.ChannelId, c.ChannelType)
 		if err != nil {
 			return err
 		}
@@ -94,7 +98,7 @@ func (s *Store) AddConversationsIfNotExist(conversations []wkdb.Conversation) er
 			continue
 		}
 		if c.Id == 0 {
-			c.Id = s.wdb.NextPrimaryKey()
+			c.Id = s.NextPrimaryKey()
 		}
 		slotId := s.opts.Slot.GetSlotId(c.Uid)
 		slotConversationsMap[slotId] = append(slotConversationsMap[slotId], c)
@@ -208,30 +212,48 @@ func (s *Store) DeleteConversations(uid string, channels []wkdb.Channel) error {
 }
 
 func (s *Store) GetConversations(uid string) ([]wkdb.Conversation, error) {
-	return s.wdb.GetConversations(uid)
+	return s.conversationStore.GetConversations(uid)
 }
 
 func (s *Store) GetConversationsByType(uid string, tp wkdb.ConversationType) ([]wkdb.Conversation, error) {
-	return s.wdb.GetConversationsByType(uid, tp)
+	return s.conversationStore.GetConversationsByType(uid, tp)
 }
 
 func (s *Store) GetConversation(uid string, channelId string, channelType uint8) (wkdb.Conversation, error) {
-	return s.wdb.GetConversation(uid, channelId, channelType)
+	return s.conversationStore.GetConversation(uid, channelId, channelType)
 }
 
 func (s *Store) GetLastConversations(uid string, tp wkdb.ConversationType, updatedAt uint64, excludeChannelTypes []uint8, limit int) ([]wkdb.Conversation, error) {
 
-	return s.wdb.GetLastConversations(uid, tp, updatedAt, excludeChannelTypes, limit)
+	return s.conversationStore.GetLastConversations(uid, tp, updatedAt, excludeChannelTypes, limit)
 }
 
 func (s *Store) GetChannelLastMessageSeq(channelId string, channelType uint8) (uint64, error) {
-	seq, _, err := s.wdb.GetChannelLastMessageSeq(channelId, channelType)
+	seq, _, err := s.messageStore.GetChannelLastMessageSeq(channelId, channelType)
 	return seq, err
 }
 
 func (s *Store) GetChannelConversationLocalUsers(channelId string, channelType uint8) ([]string, error) {
-
-	return s.wdb.GetChannelConversationLocalUsers(channelId, channelType)
+	if s.adminSearchStore != nil {
+		conversations, err := s.adminSearchStore.SearchConversations(wkdb.ConversationSearchReq{Limit: 0})
+		if err != nil {
+			return nil, err
+		}
+		uidSet := make(map[string]struct{})
+		for _, conversation := range conversations {
+			if conversation.ChannelId != channelId || conversation.ChannelType != channelType {
+				continue
+			}
+			uidSet[conversation.Uid] = struct{}{}
+		}
+		uids := make([]string, 0, len(uidSet))
+		for uid := range uidSet {
+			uids = append(uids, uid)
+		}
+		sort.Strings(uids)
+		return uids, nil
+	}
+	return s.conversationStore.GetChannelConversationLocalUsers(channelId, channelType)
 }
 
 func (s *Store) UpdateConversationIfSeqGreaterAsync(uid string, channelId string, channelType uint8, readToMsgSeq uint64) error {
@@ -242,16 +264,8 @@ func (s *Store) UpdateConversationIfSeqGreaterAsync(uid string, channelId string
 		return err
 	}
 
-	// 根据channelType判断获取slotId的方式
-	var slotId uint32
-	if channelType == wkproto.ChannelTypePerson {
-		// 个人频道根据uid获取slotId
-		slotId = s.opts.Slot.GetSlotId(uid)
-	} else {
-		// 其他频道根据channelId获取slotId
-		slotId = s.opts.Slot.GetSlotId(channelId)
-	}
-
+	// conversation is uid-owned state, so all mutations must route by uid slot.
+	slotId := s.opts.Slot.GetSlotId(uid)
 	_, err = s.opts.Slot.Propose(slotId, cmdData)
 	if err != nil {
 		s.Error("UpdateConversationIfSeqGreaterAsync failed", zap.Error(err), zap.String("uid", uid), zap.String("channelId", channelId), zap.Uint8("channelType", channelType), zap.Uint64("readToMsgSeq", readToMsgSeq))

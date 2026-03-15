@@ -14,7 +14,7 @@ import (
 	"github.com/WuKongIM/WuKongIM/pkg/network"
 	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	rafttypes "github.com/WuKongIM/WuKongIM/pkg/raft/types"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"

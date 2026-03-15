@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/WuKongIM/WuKongIM/pkg/network"
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	"github.com/WuKongIM/WuKongIM/pkg/wkhttp"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
 	"go.uber.org/zap"
@@ -30,7 +30,7 @@ func (s *Server) userSearch(c *wkhttp.Context) {
 	}
 
 	var searchLocalUsers = func() (userRespTotal, error) {
-		users, err := s.db.SearchUser(wkdb.UserSearchReq{
+		users, err := s.store.SearchUsers(wkdb.UserSearchReq{
 			Uid:             uid,
 			Limit:           limit + 1, // 实际查询出来的数据比limit多1，用于判断是否有下一页
 			OffsetCreatedAt: offsetCreatedAt,
@@ -50,7 +50,7 @@ func (s *Server) userSearch(c *wkhttp.Context) {
 
 		}
 
-		count, err := s.db.GetTotalUserCount()
+		count, err := s.store.CountUsers()
 		if err != nil {
 			s.Error("GetTotalUserCount error", zap.Error(err))
 			return userRespTotal{}, err
@@ -146,7 +146,7 @@ func (s *Server) userSearch(c *wkhttp.Context) {
 		}
 	}
 
-	userCount, err := s.db.GetTotalUserCount()
+	userCount, err := s.store.CountUsers()
 	if err != nil {
 		s.Error("GetTotalUserCount error", zap.Error(err))
 		c.ResponseError(err)
@@ -199,7 +199,7 @@ func (s *Server) deviceSearch(c *wkhttp.Context) {
 	}
 
 	var searchLocalDevice = func() (*deviceRespTotal, error) {
-		devices, err := s.db.SearchDevice(wkdb.DeviceSearchReq{
+		devices, err := s.store.SearchDevices(wkdb.DeviceSearchReq{
 			Uid:             uid,
 			DeviceFlag:      deviceFlag,
 			Limit:           limit + 1, // 实际查询出来的数据比limit多1，用于判断是否有下一页
@@ -214,7 +214,7 @@ func (s *Server) deviceSearch(c *wkhttp.Context) {
 		for _, device := range devices {
 			deviceResps = append(deviceResps, newDeviceResp(device))
 		}
-		count, err := s.db.GetTotalDeviceCount()
+		count, err := s.store.CountDevices()
 		if err != nil {
 			s.Error("GetTotalDeviceCount error", zap.Error(err))
 			return nil, err

@@ -26,4 +26,17 @@ type Storage interface {
 	Apply(logs []types.Log) error
 	// SaveConfig 保存配置
 	SaveConfig(cfg types.Config) error
+
+	// CompactLogTo 删除 index（含）之前的所有日志条目（头部清理），与 TruncateLogTo（尾部截断）方向相反
+	CompactLogTo(index uint64) error
+	// SaveSnapshot 保存快照数据
+	SaveSnapshot(snapshot types.SnapshotData) error
+	// GetSnapshot 获取最近的快照（含数据体）
+	GetSnapshot() (types.SnapshotData, error)
+	// GetSnapshotMeta 获取最近快照的元数据（不含数据体）
+	GetSnapshotMeta() (types.Snapshot, error)
+	// CreateSnapshot 创建状态机快照数据，由应用层通过回调提供序列化数据
+	CreateSnapshot(index uint64) ([]byte, error)
+	// ApplySnapshot 从快照数据恢复状态机，并使本地 raft 存储切换到快照基线
+	ApplySnapshot(snapshot types.SnapshotData) error
 }

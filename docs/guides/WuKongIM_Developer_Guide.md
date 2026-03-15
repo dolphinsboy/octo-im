@@ -104,7 +104,7 @@ engine.OnClose(func(conn wknet.Conn) {
 engine.Start()
 ```
 
-### 2. 存储层 (pkg/wkdb)
+### 2. 存储层 (pkg/wkdb/v2)
 
 基于 PebbleDB 实现的分布式存储引擎，支持消息、用户、频道等数据的存储。
 

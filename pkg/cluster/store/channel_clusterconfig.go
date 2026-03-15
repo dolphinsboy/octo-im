@@ -1,6 +1,6 @@
 package store
 
-import "github.com/WuKongIM/WuKongIM/pkg/wkdb"
+import "github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 
 func (s *Store) SaveChannelClusterConfig(cfg wkdb.ChannelClusterConfig) (version uint64, err error) {
 	cfgData, err := cfg.Marshal()

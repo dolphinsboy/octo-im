@@ -24,7 +24,7 @@ import (
 	"time"
 
 	// --- 引入必要的项目包 ---
-	"github.com/WuKongIM/WuKongIM/pkg/wkdb"
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
