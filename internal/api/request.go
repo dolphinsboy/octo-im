@@ -288,22 +288,7 @@ func (s *request) getRecentMessages(uid string, msgCount int, channels []*channe
 	if len(channels) == 0 {
 		return []*channelRecentMessage{}, nil
 	}
-
-	// 按数据库分片分组并行处理
-	shardGroups := s.groupChannelsByDbShard(channels)
-	return runParallel(shardGroups, func(chs []*channelRecentMessageReq) ([]*channelRecentMessage, error) {
-		return s.processBatchChannels(uid, msgCount, chs, orderByLast)
-	})
-}
-
-// groupChannelsByDbShard 按数据库分片对频道进行分组
-func (s *request) groupChannelsByDbShard(channels []*channelRecentMessageReq) map[uint32][]*channelRecentMessageReq {
-	shardGroups := make(map[uint32][]*channelRecentMessageReq)
-	for _, channel := range channels {
-		shardIndex := service.Store.GetChannelShardIndex(channel.ChannelId, channel.ChannelType)
-		shardGroups[shardIndex] = append(shardGroups[shardIndex], channel)
-	}
-	return shardGroups
+	return s.processBatchChannels(uid, msgCount, channels, orderByLast)
 }
 
 // processBatchChannels 批量处理频道消息查询（统一使用批量模式）

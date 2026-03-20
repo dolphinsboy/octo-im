@@ -181,17 +181,17 @@ func (s *Store) applyLog(_ uint32, log types.Log) error {
 	return s.applyCMD(cmd, log.Index)
 }
 
-func (s *Store) loopSaveChannelClusterConfig() {
+func (s *Store) loopSaveChannelClusterConfig(rt *storeRuntime) {
 	maxSizeBatch := 1000
 	done := false
 	cfgs := make([]*channelCfgReq, 0, maxSizeBatch)
 	for {
 		select {
-		case cfg := <-s.channelCfgCh:
+		case cfg := <-rt.channelCfgCh:
 			cfgs = append(cfgs, cfg)
 			for !done {
 				select {
-				case cfg = <-s.channelCfgCh:
+				case cfg = <-rt.channelCfgCh:
 					cfgs = append(cfgs, cfg)
 				default:
 					done = true
@@ -206,7 +206,7 @@ func (s *Store) loopSaveChannelClusterConfig() {
 			}
 			cfgs = cfgs[:0]
 			done = false
-		case <-s.stopper.ShouldStop():
+		case <-rt.stopper.ShouldStop():
 			return
 		}
 	}
@@ -225,25 +225,33 @@ func (s *Store) handleChannelClusterConfigSave(cmd *CMD, confVersion uint64) err
 	channelClusterConfig.ConfVersion = confVersion
 
 	waitC := make(chan error, 1)
+	rt := s.runtimeSnapshot()
+	if rt == nil {
+		return fmt.Errorf("store is not started")
+	}
 
 	select {
-	case s.channelCfgCh <- &channelCfgReq{
+	case rt.channelCfgCh <- &channelCfgReq{
 		cfg:   channelClusterConfig,
 		errCh: waitC,
 	}:
-	case <-s.stopper.ShouldStop():
+	case <-rt.stopper.ShouldStop():
 		return nil
 	}
 
 	select {
 	case err := <-waitC:
 		return err
-	case <-s.stopper.ShouldStop():
+	case <-rt.stopper.ShouldStop():
 		return nil
 	}
 }
 
 func (s *Store) handleChannelClusterConfigSavesForCMDs(cmds []*CMD, confVersions []uint64) error {
+	rt := s.runtimeSnapshot()
+	if rt == nil {
+		return fmt.Errorf("store is not started")
+	}
 
 	waits := make([]chan error, 0, len(cmds))
 	for i, cmd := range cmds {
@@ -260,11 +268,11 @@ func (s *Store) handleChannelClusterConfigSavesForCMDs(cmds []*CMD, confVersions
 		waitC := make(chan error, 1)
 		waits = append(waits, waitC)
 		select {
-		case s.channelCfgCh <- &channelCfgReq{
+		case rt.channelCfgCh <- &channelCfgReq{
 			cfg:   channelClusterConfig,
 			errCh: waitC,
 		}:
-		case <-s.stopper.ShouldStop():
+		case <-rt.stopper.ShouldStop():
 			return nil
 		}
 
@@ -279,7 +287,7 @@ func (s *Store) handleChannelClusterConfigSavesForCMDs(cmds []*CMD, confVersions
 			}
 		case <-timeoutCtx.Done():
 			return timeoutCtx.Err()
-		case <-s.stopper.ShouldStop():
+		case <-rt.stopper.ShouldStop():
 			return nil
 		}
 	}
@@ -464,11 +472,15 @@ func (s *Store) handleChannelClusterConfigSaves(reqs []*channelCfgReq) error {
 	if len(reqs) > 10 {
 		fmt.Println("handleChannelClusterConfigSaves...", len(reqs))
 	}
+	channelClusterConfigStore, err := s.requireChannelClusterConfigStore()
+	if err != nil {
+		return err
+	}
 	cfgs := make([]wkdb.ChannelClusterConfig, 0, len(reqs))
 	for _, req := range reqs {
 		cfgs = append(cfgs, req.cfg)
 	}
-	err := s.wdb.SaveChannelClusterConfigs(cfgs)
+	err = channelClusterConfigStore.SaveChannelClusterConfigs(cfgs)
 	if err != nil {
 		s.Error("save channel cluster config err", zap.Error(err))
 	}

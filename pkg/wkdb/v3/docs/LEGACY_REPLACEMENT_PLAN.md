@@ -61,16 +61,41 @@ Exit criteria:
 Current progress:
 
 - `pkg/cluster/channel` already consumes a narrowed channel-log interface
+- `pkg/cluster/store` now isolates legacy-backed ID allocation behind a
+  dedicated `PrimaryKeyAllocator`
 - `pkg/cluster/store` now uses a dedicated `UserDeviceStore` for user/device
   reads and apply writes
 - `pkg/cluster/store` now uses a dedicated `ConversationStore` for
   conversation reads and apply writes
 - `pkg/cluster/store` now uses a dedicated `ChannelStateStore` for
   channel/subscriber/allowlist/denylist reads and apply writes
-- `pkg/cluster/store` now uses a dedicated `MessageStore` for message queries
+- `pkg/cluster/store` now uses a dedicated `ChannelClusterConfigStore` for
+  channel-cluster-config reads and apply writes
+- `pkg/cluster/store` now uses a dedicated `MessageQueryStore` for channel-scoped
+  message queries
+- `pkg/cluster/store` now uses a dedicated `MessageIndexStore` for client-msg-no
+  and user-last-msg-seq lookups
+- `pkg/cluster/store` now composes recent-message batch helpers directly over
+  `MessageQueryStore`
+- `pkg/cluster/store` now uses a dedicated `MessageSearchStore` boundary for
+  legacy search/count APIs
+- `pkg/cluster/store` now uses a dedicated `NotifyQueueStore` for local notify
+  queue operations
 - `pkg/cluster/store` now uses a dedicated `MetaStore` for system uid / tester / plugin APIs
 - `pkg/cluster/store` now uses a dedicated `AdminSearchStore` for cluster admin search APIs
-- `pkg/cluster/store` auto-derives that admin-search path from `HybridDB` when available, so callers no longer need to opt in manually
+- hybrid runtime construction and DB open/close lifecycle now sit under
+  `pkg/cluster/store`, so `pkg/cluster/cluster.Server` no longer holds a raw
+  compat DB field
+- `pkg/cluster/cluster` now injects explicit primary-key/user/conversation/
+  channel/config/message-query/message-index/message-batch/message-search/
+  notify-queue/message-event/meta/admin-search boundaries plus a dedicated
+  storage lifecycle into `store` instead of passing `WithDB(...)`
+- `pkg/cluster/store` no longer derives lifecycle or slot-snapshot support from
+  a hidden raw compat DB fallback; those capabilities are now bound explicitly
+  through `WithHybridRuntime(...)`, `WithStorageLifecycle(...)`, and
+  `WithSlotSnapshotBackend(...)`
+- `pkg/cluster/cluster` now loads channel-cluster-config state through `store`
+  instead of reading it from the raw compat DB
 - the old `Store.DB()` / `icluster.WKDB()` full-DB escape hatches have been removed
 
 ### 2. Implement `MetaDB`
@@ -114,6 +139,13 @@ Exit criteria:
 
 - `PebbleDB.Local()` is no longer backed by unsupported stores
 
+Current progress:
+
+- `pkg/cluster/store` now owns a dedicated `NotifyQueueStore` dependency
+- the main cluster/store runtime binds notify-queue operations through an
+  explicit local-store wrapper over `wkdb/v3` instead of routing them through
+  the broader message-store boundary
+
 ### 4. Extract The Message Domain From legacy `wkdb`
 
 Do not treat this as a `SlotDB` migration.
@@ -134,8 +166,21 @@ Primary packages to change:
 Current progress:
 
 - `pkg/cluster/channel` already consumes `ChannelLogStore`
-- `pkg/cluster/store` now also owns a dedicated `MessageStore` dependency
+- `pkg/cluster/store` now also owns a dedicated `MessageQueryStore` dependency
+- `pkg/cluster/store` now also owns a dedicated `MessageIndexStore` dependency
+- `pkg/cluster/store` now also owns a dedicated `MessageSearchStore`
+  dependency
+- `pkg/cluster/store` now also owns a dedicated `NotifyQueueStore` dependency
 - `pkg/cluster/store` now also owns a dedicated `MessageEventStore` dependency
+- legacy runtime bindings now use separate `LegacyChannelLogStore` and
+  `LegacyMessageQueryStore` adapters instead of one shared message-store wrapper,
+  and message index/search helpers are isolated behind
+  `LegacyMessageIndexStore` / `LegacyMessageSearchStore`
+- notify-queue APIs have been split back out of `MessageQueryStore` into a dedicated
+  `NotifyQueueStore` under `LocalDB`
+- message-event runtime wiring now goes through an explicit
+  `SlotMessageEventStore` over `wkdb/v3` instead of binding the whole
+  `HybridDB` as the event-store dependency
 - runtime storage is still backed by legacy message tables, so this is boundary
   extraction, not the final storage cutover
 
@@ -164,6 +209,9 @@ Current progress:
 
 - store/runtime callers no longer need the full `wkdb.DB` surface for
   message-event operations
+- the main cluster/store runtime now binds message-event APIs through an
+  explicit slot-backed store over `wkdb/v3`; `HybridDB` remains only as a
+  compat surface for legacy callers
 - underlying semantics are still provided by the compat layer over v3 state/seq
 
 Exit criteria:
@@ -214,6 +262,17 @@ Required outcome:
 - dedicated ID allocator where needed
 - no business logic depends on old DB shard semantics
 - no runtime component depends on legacy `BatchDB`
+
+Current progress:
+
+- `pkg/cluster/store` primary-key allocator boundary now only carries
+  `NextPrimaryKey()`; legacy shard-grouping helpers are no longer exposed
+  through `store`
+- the main `pkg/cluster/store` runtime now binds that boundary to a dedicated
+  snowflake allocator instead of sourcing IDs from legacy `wkdb`
+- API-layer recent-message batching no longer groups channels by legacy DB
+  shard; that concern is now confined to the remaining legacy message-store
+  internals
 
 Exit criteria:
 

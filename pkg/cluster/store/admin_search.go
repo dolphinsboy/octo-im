@@ -1,59 +1,78 @@
 package store
 
-import "github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
+import (
+	"fmt"
+
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
+)
+
+func (s *Store) requireAdminSearchStore() (AdminSearchStore, error) {
+	if s.adminSearchStore == nil {
+		return nil, fmt.Errorf("admin search store is not configured")
+	}
+	return s.adminSearchStore, nil
+}
 
 func (s *Store) SearchUsers(req wkdb.UserSearchReq) ([]wkdb.User, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.SearchUsers(req)
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return nil, err
 	}
-	return s.wdb.SearchUser(req)
+	return adminSearchStore.SearchUsers(req)
 }
 
 func (s *Store) CountUsers() (int, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.CountUsers()
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return 0, err
 	}
-	return s.wdb.GetTotalUserCount()
+	return adminSearchStore.CountUsers()
 }
 
 func (s *Store) SearchDevices(req wkdb.DeviceSearchReq) ([]wkdb.Device, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.SearchDevices(req)
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return nil, err
 	}
-	return s.wdb.SearchDevice(req)
+	return adminSearchStore.SearchDevices(req)
 }
 
 func (s *Store) CountDevices() (int, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.CountDevices()
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return 0, err
 	}
-	return s.wdb.GetTotalDeviceCount()
+	return adminSearchStore.CountDevices()
 }
 
 func (s *Store) SearchChannels(req wkdb.ChannelSearchReq) ([]wkdb.ChannelInfo, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.SearchChannels(req)
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return nil, err
 	}
-	return s.wdb.SearchChannels(req)
+	return adminSearchStore.SearchChannels(req)
 }
 
 func (s *Store) SearchConversations(req wkdb.ConversationSearchReq) ([]wkdb.Conversation, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.SearchConversations(req)
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return nil, err
 	}
-	return s.wdb.SearchConversation(req)
+	return adminSearchStore.SearchConversations(req)
 }
 
 func (s *Store) CountConversations() (int, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.CountConversations()
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return 0, err
 	}
-	return s.wdb.GetTotalSessionCount()
+	return adminSearchStore.CountConversations()
 }
 
 func (s *Store) SearchChannelClusterConfigs(req wkdb.ChannelClusterConfigSearchReq, filter ...func(cfg wkdb.ChannelClusterConfig) bool) ([]wkdb.ChannelClusterConfig, error) {
-	if s.adminSearchStore != nil {
-		return s.adminSearchStore.SearchChannelClusterConfigs(req, filter...)
+	adminSearchStore, err := s.requireAdminSearchStore()
+	if err != nil {
+		return nil, err
 	}
-	return s.wdb.SearchChannelClusterConfig(req, filter...)
+	return adminSearchStore.SearchChannelClusterConfigs(req, filter...)
 }

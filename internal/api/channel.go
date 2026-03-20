@@ -261,7 +261,6 @@ func (ch *channel) addSubscriberWithReq(req subscriberAddReq) error {
 				createdAt := time.Now()
 				updatedAt := time.Now()
 				conversations = append(conversations, wkdb.Conversation{
-					Id:           service.Store.NextPrimaryKey(),
 					Uid:          subscriber,
 					ChannelId:    req.ChannelId,
 					ChannelType:  req.ChannelType,

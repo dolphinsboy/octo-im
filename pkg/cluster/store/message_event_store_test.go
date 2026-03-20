@@ -157,3 +157,31 @@ func TestStoreMessageEventQueriesUseDedicatedEventStore(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, state, gotSingleState)
 }
+
+func TestStoreDerivesMessageEventStoreFromHybridDB(t *testing.T) {
+	hybrid, _ := newHybridMetaLocalTestDB(t)
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
+
+	require.IsType(t, &SlotMessageEventStore{}, s.eventStore)
+
+	stored, state, err := s.eventStore.AppendMessageEventWithState(&wkdb.MessageEvent{
+		ChannelId:   "channel-1",
+		ChannelType: 2,
+		ClientMsgNo: "client-1",
+		EventID:     "evt-1",
+		EventKey:    wkdb.EventKeyDefault,
+		EventType:   wkdb.EventTypeStreamSnapshot,
+		Payload:     []byte(`{"kind":"text","text":"hello"}`),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	require.NotNil(t, state)
+	require.Equal(t, uint64(1), stored.MsgEventSeq)
+	require.Equal(t, uint64(1), state.LastMsgEventSeq)
+
+	gotState, err := s.GetMessageEventState("channel-1", 2, "client-1", wkdb.EventKeyDefault)
+	require.NoError(t, err)
+	require.NotNil(t, gotState)
+	require.Equal(t, uint64(1), gotState.LastMsgEventSeq)
+	require.Equal(t, []byte(`{"kind":"text","text":"hello"}`), gotState.SnapshotPayload)
+}

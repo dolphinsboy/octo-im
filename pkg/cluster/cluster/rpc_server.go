@@ -135,7 +135,7 @@ func (r *rpcServer) handleChannelConfig(c *wkserver.Context) {
 		c.WriteErr(err)
 		return
 	}
-	cfg, err := r.s.db.GetChannelClusterConfig(req.channelId, req.channelType)
+	cfg, err := r.s.store.GetChannelClusterConfig(req.channelId, req.channelType)
 	if err != nil && err != wkdb.ErrNotFound {
 		r.Error("get channel config failed", zap.Error(err))
 		c.WriteErr(err)
@@ -306,7 +306,7 @@ func (s *Server) getChannelLastLogInfo(channelId string, channelType uint8) (*Ch
 		return nil, err
 	}
 
-	cfg, err := s.db.GetChannelClusterConfig(channelId, channelType)
+	cfg, err := s.store.GetChannelClusterConfig(channelId, channelType)
 	if err != nil && err != wkdb.ErrNotFound {
 		return nil, err
 	}

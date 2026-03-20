@@ -156,9 +156,8 @@ func newSnapshotTestBundle(t *testing.T, slotCount uint32) *snapshotTestBundle {
 	hybrid := clusterstore.NewHybridDB(legacy, slotDB, slotCount, func(key string) uint32 {
 		return wkutil.GetSlotNum(int(slotCount), key)
 	})
-	require.NoError(t, hybrid.Open())
 
-	st := clusterstore.New(clusterstore.NewOptions(clusterstore.WithDB(hybrid)))
+	st := clusterstore.New(clusterstore.NewOptions(clusterstore.WithCompatDBRuntime(hybrid)))
 	require.NoError(t, st.Start())
 
 	server := &Server{opts: &Options{
@@ -176,7 +175,6 @@ func newSnapshotTestBundle(t *testing.T, slotCount uint32) *snapshotTestBundle {
 		cleanup: func() {
 			st.Stop()
 			require.NoError(t, storage.Close())
-			require.NoError(t, hybrid.Close())
 		},
 	}
 }

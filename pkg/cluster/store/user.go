@@ -53,6 +53,9 @@ func (s *Store) UpdateDevice(d wkdb.Device) error {
 }
 
 func (s *Store) AddDevice(d wkdb.Device) error {
+	if d.Id == 0 {
+		d.Id = s.nextPrimaryKey()
+	}
 	data := EncodeCMDDevice(d)
 	cmd := NewCMD(CMDAddDevice, data)
 	cmdData, err := cmd.Marshal()

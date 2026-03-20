@@ -373,7 +373,7 @@ func TestStoreChannelQueriesUseDedicatedChannelStateStore(t *testing.T) {
 
 func TestStoreDerivesChannelStateStoreFromHybridDB(t *testing.T) {
 	hybrid, _ := newHybridMetaLocalTestDB(t)
-	s := New(NewOptions(WithDB(hybrid)))
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
 	require.NotNil(t, s.channelStateStore)
 }
 

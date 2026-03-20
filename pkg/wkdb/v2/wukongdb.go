@@ -38,15 +38,15 @@ type wukongDB struct {
 
 	metrics trace.IDBMetrics
 
-	channelSeqCache      *channelSeqCache
-	conversationCache    *ConversationCache
-	channelInfoCache     *ChannelInfoCache
-	permissionCache      *PermissionCache           // 统一的权限缓存（替代 denylistCache, subscriberCache, allowlistCache）
-	clusterConfigCache   *ChannelClusterConfigCache // 频道集群配置缓存
-	deviceCache          *DeviceCache               // 设备缓存
-	userLastMsgSeqCache  *userLastMsgSeqCache       // 用户在频道内发送的最后一条消息序号缓存
-	cacheManager         *CacheManager              // 缓存管理器
-	performanceMonitor   *PerformanceMonitor        // 性能监控器
+	channelSeqCache     *channelSeqCache
+	conversationCache   *ConversationCache
+	channelInfoCache    *ChannelInfoCache
+	permissionCache     *PermissionCache           // 统一的权限缓存（替代 denylistCache, subscriberCache, allowlistCache）
+	clusterConfigCache  *ChannelClusterConfigCache // 频道集群配置缓存
+	deviceCache         *DeviceCache               // 设备缓存
+	userLastMsgSeqCache *userLastMsgSeqCache       // 用户在频道内发送的最后一条消息序号缓存
+	cacheManager        *CacheManager              // 缓存管理器
+	performanceMonitor  *PerformanceMonitor        // 性能监控器
 
 	h hash.Hash32
 }
@@ -68,13 +68,13 @@ func NewWukongDB(opts *Options) DB {
 
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
 	wk := &wukongDB{
-		opts:               opts,
-		shardNum:           uint32(opts.ShardNum),
-		prmaryKeyGen:       prmaryKeyGen,
-		endian:             endian,
-		cancelCtx:          cancelCtx,
-		cancelFunc:         cancelFunc,
-		metrics:            metrics,
+		opts:                opts,
+		shardNum:            uint32(opts.ShardNum),
+		prmaryKeyGen:        prmaryKeyGen,
+		endian:              endian,
+		cancelCtx:           cancelCtx,
+		cancelFunc:          cancelFunc,
+		metrics:             metrics,
 		channelSeqCache:     newChannelSeqCache(1000, endian),
 		conversationCache:   NewConversationCache(1000),         // 缓存1000个 GetLastConversations 查询结果
 		channelInfoCache:    NewChannelInfoCache(1000),          // 缓存频道信息
@@ -83,7 +83,7 @@ func NewWukongDB(opts *Options) DB {
 		deviceCache:         NewDeviceCache(1000),               // 缓存1000个设备
 		userLastMsgSeqCache: newUserLastMsgSeqCache(10000),      // 缓存10000个用户在频道内发送的最后一条消息序号
 		performanceMonitor:  NewPerformanceMonitor(),            // 性能监控器
-		h:                  fnv.New32(),
+		h:                   fnv.New32(),
 		sync: &pebble.WriteOptions{
 			Sync: true,
 		},
@@ -253,31 +253,35 @@ func (wk *wukongDB) collectMetricsLoop() {
 }
 
 func (wk *wukongDB) collectMetrics() {
+	if trace.GlobalTrace == nil || trace.GlobalTrace.Metrics == nil || trace.GlobalTrace.Metrics.DB() == nil {
+		return
+	}
+	dbMetrics := trace.GlobalTrace.Metrics.DB()
 
 	for i := uint32(0); i < uint32(wk.shardNum); i++ {
 		ms := wk.dbs[i].Metrics()
 
 		// ========== compact 压缩相关 ==========
-		trace.GlobalTrace.Metrics.DB().CompactTotalCountSet(i, ms.Compact.Count)
-		trace.GlobalTrace.Metrics.DB().CompactDefaultCountSet(i, ms.Compact.DefaultCount)
-		trace.GlobalTrace.Metrics.DB().CompactDeleteOnlyCountSet(i, ms.Compact.DeleteOnlyCount)
-		trace.GlobalTrace.Metrics.DB().CompactElisionOnlyCountSet(i, ms.Compact.ElisionOnlyCount)
-		trace.GlobalTrace.Metrics.DB().CompactEstimatedDebtSet(i, int64(ms.Compact.EstimatedDebt))
-		trace.GlobalTrace.Metrics.DB().CompactInProgressBytesSet(i, ms.Compact.InProgressBytes)
-		trace.GlobalTrace.Metrics.DB().CompactMarkedFilesSet(i, int64(ms.Compact.MarkedFiles))
-		trace.GlobalTrace.Metrics.DB().CompactMoveCountSet(i, ms.Compact.MoveCount)
-		trace.GlobalTrace.Metrics.DB().CompactMultiLevelCount(i, ms.Compact.MultiLevelCount)
-		trace.GlobalTrace.Metrics.DB().CompactNumInProgressSet(i, ms.Compact.NumInProgress)
-		trace.GlobalTrace.Metrics.DB().CompactReadCountSet(i, ms.Compact.ReadCount)
-		trace.GlobalTrace.Metrics.DB().CompactRewriteCountSet(i, ms.Compact.RewriteCount)
+		dbMetrics.CompactTotalCountSet(i, ms.Compact.Count)
+		dbMetrics.CompactDefaultCountSet(i, ms.Compact.DefaultCount)
+		dbMetrics.CompactDeleteOnlyCountSet(i, ms.Compact.DeleteOnlyCount)
+		dbMetrics.CompactElisionOnlyCountSet(i, ms.Compact.ElisionOnlyCount)
+		dbMetrics.CompactEstimatedDebtSet(i, int64(ms.Compact.EstimatedDebt))
+		dbMetrics.CompactInProgressBytesSet(i, ms.Compact.InProgressBytes)
+		dbMetrics.CompactMarkedFilesSet(i, int64(ms.Compact.MarkedFiles))
+		dbMetrics.CompactMoveCountSet(i, ms.Compact.MoveCount)
+		dbMetrics.CompactMultiLevelCount(i, ms.Compact.MultiLevelCount)
+		dbMetrics.CompactNumInProgressSet(i, ms.Compact.NumInProgress)
+		dbMetrics.CompactReadCountSet(i, ms.Compact.ReadCount)
+		dbMetrics.CompactRewriteCountSet(i, ms.Compact.RewriteCount)
 
 		// ========== flush 相关 ==========
-		trace.GlobalTrace.Metrics.DB().FlushCountAdd(i, int64(ms.Flush.Count))
-		trace.GlobalTrace.Metrics.DB().FlushBytesAdd(i, ms.Flush.WriteThroughput.Bytes)
-		trace.GlobalTrace.Metrics.DB().FlushNumInProgressAdd(i, ms.Flush.NumInProgress)
-		trace.GlobalTrace.Metrics.DB().FlushAsIngestCountAdd(i, int64(ms.Flush.AsIngestCount))
-		trace.GlobalTrace.Metrics.DB().FlushAsIngestTableCountAdd(i, int64(ms.Flush.AsIngestTableCount))
-		trace.GlobalTrace.Metrics.DB().FlushAsIngestBytesAdd(i, int64(ms.Flush.AsIngestBytes))
+		dbMetrics.FlushCountAdd(i, int64(ms.Flush.Count))
+		dbMetrics.FlushBytesAdd(i, ms.Flush.WriteThroughput.Bytes)
+		dbMetrics.FlushNumInProgressAdd(i, ms.Flush.NumInProgress)
+		dbMetrics.FlushAsIngestCountAdd(i, int64(ms.Flush.AsIngestCount))
+		dbMetrics.FlushAsIngestTableCountAdd(i, int64(ms.Flush.AsIngestTableCount))
+		dbMetrics.FlushAsIngestBytesAdd(i, int64(ms.Flush.AsIngestBytes))
 
 		// ========== memtable 内存表相关 ==========
 		trace.GlobalTrace.Metrics.DB().MemTableCountSet(i, int64(ms.MemTable.Count))

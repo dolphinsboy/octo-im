@@ -10,16 +10,21 @@ type Options struct {
 
 	Slot icluster.Slot
 
-	DB wkdb.DB
+	Lifecycle StorageLifecycle
 
-	UserDeviceStore     UserDeviceStore
-	ConversationStore   ConversationStore
-	ChannelStateStore   ChannelStateStore
-	MessageStore        MessageStore
-	MessageEventStore   MessageEventStore
-	MetaStore           MetaStore
-	MetaCommandProposer MetaCommandProposer
-	AdminSearchStore    AdminSearchStore
+	PrimaryKeyAllocator       PrimaryKeyAllocator
+	UserDeviceStore           UserDeviceStore
+	ConversationStore         ConversationStore
+	ChannelStateStore         ChannelStateStore
+	ChannelClusterConfigStore ChannelClusterConfigStore
+	MessageQueryStore         MessageQueryStore
+	MessageIndexStore         MessageIndexStore
+	MessageSearchStore        MessageSearchStore
+	NotifyQueueStore          NotifyQueueStore
+	MessageEventStore         MessageEventStore
+	MetaStore                 MetaStore
+	MetaCommandProposer       MetaCommandProposer
+	AdminSearchStore          AdminSearchStore
 
 	SlotSnapshotBackend SlotSnapshotBackend
 
@@ -37,6 +42,11 @@ func NewOptions(opt ...Option) *Options {
 }
 
 type Option func(*Options)
+
+type StorageLifecycle interface {
+	Open() error
+	Close() error
+}
 
 func WithNodeId(nodeId uint64) Option {
 	return func(o *Options) {
@@ -56,9 +66,73 @@ func WithChannel(channel icluster.Channel) Option {
 	}
 }
 
-func WithDB(db wkdb.DB) Option {
+func WithCompatDBRuntime(db wkdb.DB) Option {
 	return func(o *Options) {
-		o.DB = db
+		if db == nil {
+			return
+		}
+		o.Lifecycle = db
+		o.PrimaryKeyAllocator = db
+		o.MessageQueryStore = NewLegacyMessageQueryStore(db)
+		o.MessageIndexStore = NewLegacyMessageIndexStore(db)
+		o.MessageSearchStore = NewLegacyMessageSearchStore(db)
+		o.NotifyQueueStore = NewLegacyNotifyQueueStore(db)
+		o.MetaStore = db
+		if snapshotBackend, ok := any(db).(SlotSnapshotBackend); ok {
+			o.SlotSnapshotBackend = snapshotBackend
+		}
+		if hybrid, ok := db.(*HybridDB); ok {
+			o.UserDeviceStore = NewSlotUserDeviceStore(hybrid.slotDB, hybrid.routeSlot)
+			o.ConversationStore = NewSlotConversationStore(hybrid.slotDB, hybrid.slotCount, hybrid.routeSlot, func() uint64 {
+				return hybrid.NextPrimaryKey()
+			})
+			o.ChannelStateStore = NewSlotChannelStateStore(hybrid.slotDB, hybrid.routeSlot)
+			o.ChannelClusterConfigStore = NewSlotChannelClusterConfigStore(hybrid.slotDB, hybrid.slotCount, hybrid.routeSlot)
+			o.NotifyQueueStore = NewLocalNotifyQueueStore(hybrid.slotDB)
+			o.MessageEventStore = NewSlotMessageEventStore(hybrid.slotDB, hybrid.routeSlot)
+			o.AdminSearchStore = NewSlotAdminSearchStore(hybrid.slotDB, hybrid.slotCount, hybrid.routeSlot)
+			return
+		}
+		o.MessageEventStore = db
+		o.UserDeviceStore = db
+		o.ConversationStore = db
+		o.ChannelStateStore = db
+		o.ChannelClusterConfigStore = db
+		o.AdminSearchStore = NewLegacyAdminSearchStore(db)
+	}
+}
+
+func WithHybridRuntime(runtime *HybridRuntime) Option {
+	return func(o *Options) {
+		if runtime == nil {
+			return
+		}
+		o.Lifecycle = runtime.Lifecycle
+		o.SlotSnapshotBackend = runtime.SlotSnapshotBackend
+		o.PrimaryKeyAllocator = runtime.PrimaryKeyAllocator
+		o.UserDeviceStore = runtime.UserDeviceStore
+		o.ConversationStore = runtime.ConversationStore
+		o.ChannelStateStore = runtime.ChannelStateStore
+		o.ChannelClusterConfigStore = runtime.ChannelClusterConfigStore
+		o.MessageQueryStore = runtime.MessageQueryStore
+		o.MessageIndexStore = runtime.MessageIndexStore
+		o.MessageSearchStore = runtime.MessageSearchStore
+		o.NotifyQueueStore = runtime.NotifyQueueStore
+		o.MessageEventStore = runtime.MessageEventStore
+		o.MetaStore = runtime.MetaStore
+		o.AdminSearchStore = runtime.AdminSearchStore
+	}
+}
+
+func WithStorageLifecycle(lifecycle StorageLifecycle) Option {
+	return func(o *Options) {
+		o.Lifecycle = lifecycle
+	}
+}
+
+func WithPrimaryKeyAllocator(primaryKeyAllocator PrimaryKeyAllocator) Option {
+	return func(o *Options) {
+		o.PrimaryKeyAllocator = primaryKeyAllocator
 	}
 }
 
@@ -80,9 +154,33 @@ func WithChannelStateStore(channelStateStore ChannelStateStore) Option {
 	}
 }
 
-func WithMessageStore(messageStore MessageStore) Option {
+func WithChannelClusterConfigStore(channelClusterConfigStore ChannelClusterConfigStore) Option {
 	return func(o *Options) {
-		o.MessageStore = messageStore
+		o.ChannelClusterConfigStore = channelClusterConfigStore
+	}
+}
+
+func WithMessageQueryStore(messageQueryStore MessageQueryStore) Option {
+	return func(o *Options) {
+		o.MessageQueryStore = messageQueryStore
+	}
+}
+
+func WithMessageIndexStore(messageIndexStore MessageIndexStore) Option {
+	return func(o *Options) {
+		o.MessageIndexStore = messageIndexStore
+	}
+}
+
+func WithMessageSearchStore(messageSearchStore MessageSearchStore) Option {
+	return func(o *Options) {
+		o.MessageSearchStore = messageSearchStore
+	}
+}
+
+func WithNotifyQueueStore(notifyQueueStore NotifyQueueStore) Option {
+	return func(o *Options) {
+		o.NotifyQueueStore = notifyQueueStore
 	}
 }
 

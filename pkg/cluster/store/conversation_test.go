@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
@@ -15,6 +16,7 @@ type testSlot struct {
 	proposedSlots               []uint32
 	proposedUntilAppliedSlots   []uint32
 	proposedUntilAppliedTimeout []uint32
+	mu                          sync.Mutex
 }
 
 func (t *testSlot) SlotLeaderId(slotId uint32) uint64 {
@@ -22,21 +24,29 @@ func (t *testSlot) SlotLeaderId(slotId uint32) uint64 {
 }
 
 func (t *testSlot) GetSlotId(v string) uint32 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.getSlotIdCalls = append(t.getSlotIdCalls, v)
 	return t.slotByKey[v]
 }
 
 func (t *testSlot) Propose(slotId uint32, data []byte) (*types.ProposeResp, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.proposedSlots = append(t.proposedSlots, slotId)
 	return &types.ProposeResp{}, nil
 }
 
 func (t *testSlot) ProposeUntilApplied(slotId uint32, data []byte) (*types.ProposeResp, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.proposedUntilAppliedSlots = append(t.proposedUntilAppliedSlots, slotId)
 	return &types.ProposeResp{}, nil
 }
 
 func (t *testSlot) ProposeUntilAppliedTimeout(ctx context.Context, slotId uint32, data []byte) (*types.ProposeResp, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.proposedUntilAppliedTimeout = append(t.proposedUntilAppliedTimeout, slotId)
 	return &types.ProposeResp{}, nil
 }

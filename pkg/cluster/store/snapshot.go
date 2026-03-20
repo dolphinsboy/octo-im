@@ -77,15 +77,7 @@ func (s *Store) slotSnapshotBackend() (SlotSnapshotBackend, error) {
 		}
 		return s.opts.SlotSnapshotBackend, nil
 	}
-
-	backend, ok := any(s.wdb).(SlotSnapshotBackend)
-	if !ok {
-		return nil, rafttypes.ErrSnapshotNotSupported
-	}
-	if err := validateSlotSnapshotBackend(backend); err != nil {
-		return nil, err
-	}
-	return backend, nil
+	return nil, rafttypes.ErrSnapshotNotSupported
 }
 
 func validateSlotSnapshotBackend(backend SlotSnapshotBackend) error {

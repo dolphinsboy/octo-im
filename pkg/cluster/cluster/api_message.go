@@ -185,9 +185,9 @@ func (s *Server) messageSearch(c *wkhttp.Context) {
 			messages = messages[:limit]
 		}
 	}
-	count, err := s.db.GetTotalMessageCount()
+	count, err := s.store.CountMessages()
 	if err != nil {
-		s.Error("GetTotalMessageCount error", zap.Error(err))
+		s.Error("CountMessages error", zap.Error(err))
 		c.ResponseError(err)
 		return
 	}

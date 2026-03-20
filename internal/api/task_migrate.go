@@ -458,7 +458,6 @@ func (m *MigrateTask) addDevice(user *mgUserResp) error {
 	updatedAt := time.Now()
 
 	err := service.Store.AddDevice(wkdb.Device{
-		Id:          service.Store.NextPrimaryKey(),
 		Uid:         user.Uid,
 		DeviceFlag:  uint64(user.DeviceFlag),
 		DeviceLevel: user.DeviceLevel,

@@ -86,6 +86,37 @@ func TestStoreCreateSlotSnapshotUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, rafttypes.ErrSnapshotNotSupported)
 }
 
+func TestStoreSupportsSlotSnapshotFromHybridRuntime(t *testing.T) {
+	router, err := wkdbv3.NewStaticBucketRouter(4)
+	require.NoError(t, err)
+
+	db, err := wkdbv3.NewPebbleDB(wkdbv3.PebbleDBOptions{
+		DataDir:      "/wkdb-v3",
+		Router:       router,
+		FS:           vfs.NewMem(),
+		WriteOptions: pebble.NoSync,
+		PebbleOptions: &pebble.Options{
+			FormatMajorVersion: pebble.FormatNewest,
+		},
+		SnapshotNow:       func() int64 { return 1710000000 },
+		Now:               func() time.Time { return time.Unix(1710000000, 0).UTC() },
+		ClearSlotCachesFn: func(slotID uint32) {},
+		RebuildDerivedState: func(_ context.Context, slotID uint32) error {
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Open())
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
+
+	s := New(NewOptions(WithHybridRuntime(&HybridRuntime{
+		SlotSnapshotBackend: db,
+	})))
+	require.True(t, s.SupportsSlotSnapshot())
+}
+
 func TestStoreApplySlotSnapshotRejectsSlotMismatch(t *testing.T) {
 	router, err := wkdbv3.NewStaticBucketRouter(4)
 	require.NoError(t, err)

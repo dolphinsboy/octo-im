@@ -329,7 +329,6 @@ func (u *user) updateToken(c *wkhttp.Context) {
 	if wkdb.IsEmptyDevice(device) {
 		createdAt := time.Now()
 		err = service.Store.AddDevice(wkdb.Device{
-			Id:          service.Store.NextPrimaryKey(),
 			Uid:         req.UID,
 			DeviceFlag:  uint64(req.DeviceFlag),
 			DeviceLevel: uint8(req.DeviceLevel),

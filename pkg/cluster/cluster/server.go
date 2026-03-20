@@ -20,12 +20,10 @@ import (
 	rafttype "github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	"github.com/WuKongIM/WuKongIM/pkg/trace"
 	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
-	wkdbv3 "github.com/WuKongIM/WuKongIM/pkg/wkdb/v3"
 	"github.com/WuKongIM/WuKongIM/pkg/wklog"
 	"github.com/WuKongIM/WuKongIM/pkg/wkserver"
 	"github.com/WuKongIM/WuKongIM/pkg/wkserver/proto"
 	"github.com/WuKongIM/WuKongIM/pkg/wkutil"
-	"github.com/cockroachdb/pebble"
 	"github.com/lni/goutils/syncutil"
 	"github.com/panjf2000/ants/v2"
 	"github.com/panjf2000/gnet/v2"
@@ -50,8 +48,6 @@ type Server struct {
 	// rpc服务
 	rpcServer *rpcServer
 	rpcClient *rpcClient
-	// 数据库
-	db wkdb.DB
 	// 配置
 	opts      *Options
 	apiPrefix string // api前缀
@@ -96,40 +92,17 @@ func New(opts *Options) *Server {
 	s.rpcServer = newRpcServer(s)
 	s.rpcClient = newRpcClient(s)
 
-	legacyDB := wkdb.NewWukongDB(
-		wkdb.NewOptions(
-			wkdb.WithShardNum(opts.DB.WKDbShardNum),
-			wkdb.WithDir(path.Join(opts.DataDir, "db")),
-			wkdb.WithNodeId(opts.ConfigOptions.NodeId),
-			wkdb.WithMemTableSize(opts.DB.WKDbMemTableSize),
-			wkdb.WithSlotCount(int(opts.ConfigOptions.SlotCount)),
-		),
-	)
-	router, err := wkdbv3.NewStaticBucketRouter(uint32(opts.DB.WKDbShardNum))
-	if err != nil {
-		s.Panic("create wkdb v3 router failed", zap.Error(err))
-	}
-	slotStateDB, err := wkdbv3.NewPebbleDB(wkdbv3.PebbleDBOptions{
-		DataDir:       path.Join(opts.DataDir, "dbv3"),
-		Router:        router,
-		WriteOptions:  pebble.Sync,
-		PebbleOptions: &pebble.Options{FormatMajorVersion: pebble.FormatNewest, MemTableSize: opts.DB.WKDbMemTableSize},
-		ClearSlotCachesFn: func(slotID uint32) {
-		},
-		RebuildDerivedState: func(ctx context.Context, slotID uint32) error {
-			return nil
-		},
+	runtime, err := store.NewHybridRuntime(store.HybridRuntimeOptions{
+		DataDir:      opts.DataDir,
+		NodeID:       opts.ConfigOptions.NodeId,
+		SlotCount:    opts.ConfigOptions.SlotCount,
+		ShardNum:     opts.DB.WKDbShardNum,
+		MemTableSize: opts.DB.WKDbMemTableSize,
 	})
 	if err != nil {
-		s.Panic("create wkdb v3 db failed", zap.Error(err))
+		s.Panic("create hybrid cluster runtime failed", zap.Error(err))
 	}
-	routeSlot := func(key string) uint32 {
-		return wkutil.GetSlotNum(int(opts.ConfigOptions.SlotCount), key)
-	}
-	s.db = store.NewHybridDB(legacyDB, slotStateDB, opts.ConfigOptions.SlotCount, routeSlot)
-	messageStore := store.NewLegacyMessageStore(s.db)
-	channelStateStore := store.NewSlotChannelStateStore(slotStateDB, routeSlot)
-	adminSearchStore := store.NewSlotAdminSearchStore(slotStateDB, opts.ConfigOptions.SlotCount, routeSlot)
+	channelLogStore := runtime.ChannelLogStore
 
 	// 节点之间通讯的网络服务
 	s.netServer = wkserver.New(
@@ -176,25 +149,25 @@ func New(opts *Options) *Server {
 		channel.WithSlot(s.slotServer),
 		channel.WithNode(s.cfgServer),
 		channel.WithCluster(s),
-		channel.WithLogDB(messageStore),
+		channel.WithLogDB(channelLogStore),
 		channel.WithRPC(s.rpcClient),
 		channel.WithOnSaveConfig(s.onSaveChannelConfig),
 		channel.WithDestoryAfterIdleTick(opts.ConfigOptions.ChannelDestoryAfterIdleTick),
 	))
+
+	snapshotBackend := runtime.SlotSnapshotBackend
+	if opts.SlotSnapshotBackend != nil {
+		snapshotBackend = opts.SlotSnapshotBackend
+	}
 
 	// 分布式存储
 	s.store = store.New(store.NewOptions(
 		store.WithNodeId(opts.ConfigOptions.NodeId),
 		store.WithSlot(s.slotServer),
 		store.WithChannel(s.channelServer),
-		store.WithDB(s.db),
-		store.WithChannelStateStore(channelStateStore),
-		store.WithMessageStore(messageStore),
-		store.WithMessageEventStore(s.db),
-		store.WithMetaStore(s.db),
+		store.WithHybridRuntime(runtime),
 		store.WithMetaCommandProposer(store.NewSlotZeroMetaCommandProposer(s.slotServer, 0)),
-		store.WithAdminSearchStore(adminSearchStore),
-		store.WithSlotSnapshotBackend(opts.SlotSnapshotBackend),
+		store.WithSlotSnapshotBackend(snapshotBackend),
 		store.WithIsCmdChannel(opts.IsCmdChannel),
 	))
 	s.bindSlotSnapshotCallbacks(slotOpts)
@@ -222,12 +195,7 @@ func (s *Server) Start() error {
 
 	s.channelKeyLock.StartCleanLoop()
 
-	err := s.db.Open()
-	if err != nil {
-		return err
-	}
-
-	err = s.store.Start()
+	err := s.store.Start()
 	if err != nil {
 		return err
 	}
@@ -305,7 +273,6 @@ func (s *Server) Stop() {
 	s.channelServer.Stop()
 	s.netServer.Stop()
 	s.store.Stop()
-	s.db.Close()
 	s.channelKeyLock.StopCleanLoop()
 }
 

@@ -1,9 +1,11 @@
 package store
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/WuKongIM/WuKongIM/pkg/raft/types"
 	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
 	wkproto "github.com/WuKongIM/WuKongIMGoProto"
 	"github.com/stretchr/testify/require"
@@ -64,6 +66,36 @@ func (s *stubUserDeviceStore) GetDevice(uid string, deviceFlag uint64) (wkdb.Dev
 	return s.device, nil
 }
 
+type captureDeviceProposalSlot struct {
+	slotByUID               map[string]uint32
+	getSlotIdCalls          []string
+	proposedUntilAppliedIDs []uint32
+	proposedCmds            [][]byte
+}
+
+func (s *captureDeviceProposalSlot) SlotLeaderId(slotId uint32) uint64 {
+	return 0
+}
+
+func (s *captureDeviceProposalSlot) GetSlotId(v string) uint32 {
+	s.getSlotIdCalls = append(s.getSlotIdCalls, v)
+	return s.slotByUID[v]
+}
+
+func (s *captureDeviceProposalSlot) Propose(slotId uint32, data []byte) (*types.ProposeResp, error) {
+	return &types.ProposeResp{}, nil
+}
+
+func (s *captureDeviceProposalSlot) ProposeUntilApplied(slotId uint32, data []byte) (*types.ProposeResp, error) {
+	s.proposedUntilAppliedIDs = append(s.proposedUntilAppliedIDs, slotId)
+	s.proposedCmds = append(s.proposedCmds, append([]byte(nil), data...))
+	return &types.ProposeResp{}, nil
+}
+
+func (s *captureDeviceProposalSlot) ProposeUntilAppliedTimeout(ctx context.Context, slotId uint32, data []byte) (*types.ProposeResp, error) {
+	return &types.ProposeResp{}, nil
+}
+
 func TestStoreDerivesUserDeviceStoreFromHybridDB(t *testing.T) {
 	hybrid, _ := newHybridMetaLocalTestDB(t)
 	now := time.Unix(1710000000, 0)
@@ -83,7 +115,7 @@ func TestStoreDerivesUserDeviceStoreFromHybridDB(t *testing.T) {
 		UpdatedAt:  &now,
 	}))
 
-	s := New(NewOptions(WithDB(hybrid)))
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
 	require.NotNil(t, s.userDeviceStore)
 
 	user, err := s.GetUser("user-in-v3")
@@ -127,6 +159,37 @@ func TestStoreUserAndDeviceReadsUseUserDeviceStore(t *testing.T) {
 	require.Equal(t, "get_device", stub.lastOp)
 	require.Equal(t, "user-1", stub.lastUID)
 	require.Equal(t, uint64(1), stub.lastDeviceFlag)
+}
+
+func TestStoreAddDeviceAssignsPrimaryKeyWhenMissing(t *testing.T) {
+	slot := &captureDeviceProposalSlot{
+		slotByUID: map[string]uint32{"user-1": 11},
+	}
+	s := New(NewOptions(
+		WithSlot(slot),
+		WithPrimaryKeyAllocator(&stubPrimaryKeyAllocator{nextPrimaryKey: 99}),
+	))
+
+	now := time.Unix(1710000000, 0)
+	require.NoError(t, s.AddDevice(wkdb.Device{
+		Uid:         "user-1",
+		DeviceFlag:  1,
+		DeviceLevel: 2,
+		Token:       "token-1",
+		CreatedAt:   &now,
+		UpdatedAt:   &now,
+	}))
+
+	require.Equal(t, []string{"user-1"}, slot.getSlotIdCalls)
+	require.Equal(t, []uint32{11}, slot.proposedUntilAppliedIDs)
+	require.Len(t, slot.proposedCmds, 1)
+
+	var cmd CMD
+	require.NoError(t, cmd.Unmarshal(slot.proposedCmds[0]))
+	device, err := cmd.DecodeCMDDevice()
+	require.NoError(t, err)
+	require.Equal(t, uint64(99), device.Id)
+	require.Equal(t, "user-1", device.Uid)
 }
 
 func TestStoreApplyUserAndDeviceCommandsUseUserDeviceStore(t *testing.T) {

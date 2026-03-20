@@ -119,7 +119,7 @@ func TestHybridDBRoutesMetaAndLocalStoresToV3(t *testing.T) {
 
 func TestStorePluginWrappersUseHybridDB(t *testing.T) {
 	hybrid, _ := newHybridMetaLocalTestDB(t)
-	s := New(NewOptions(WithDB(hybrid)))
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
 
 	now := time.Unix(1710000000, 0)
 	require.NoError(t, s.AddOrUpdatePlugin(wkdb.Plugin{

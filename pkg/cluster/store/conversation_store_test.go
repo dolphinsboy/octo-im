@@ -170,7 +170,7 @@ func TestStoreDerivesConversationStoreFromHybridDB(t *testing.T) {
 		},
 	}))
 
-	s := New(NewOptions(WithDB(hybrid)))
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
 	require.NotNil(t, s.conversationStore)
 
 	conversations, err := s.GetConversations("user-1")

@@ -51,8 +51,28 @@ func (s *stubAdminSearchStore) SearchChannelClusterConfigs(req wkdb.ChannelClust
 
 func TestStoreDerivesAdminSearchStoreFromHybridDB(t *testing.T) {
 	hybrid, _ := newHybridMetaLocalTestDB(t)
-	s := New(NewOptions(WithDB(hybrid)))
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
 	require.NotNil(t, s.adminSearchStore)
+}
+
+func TestStoreDerivesLegacyAdminSearchStoreFromLegacyDB(t *testing.T) {
+	_, legacy := newHybridMetaLocalTestDB(t)
+	now := time.Unix(1710000000, 0)
+
+	require.NoError(t, legacy.AddUser(wkdb.User{
+		Id:        1,
+		Uid:       "user-in-legacy",
+		CreatedAt: &now,
+		UpdatedAt: &now,
+	}))
+
+	s := New(NewOptions(WithCompatDBRuntime(legacy)))
+	require.IsType(t, &LegacyAdminSearchStore{}, s.adminSearchStore)
+
+	users, err := s.SearchUsers(wkdb.UserSearchReq{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, users, 1)
+	require.Equal(t, "user-in-legacy", users[0].Uid)
 }
 
 func TestStoreSearchUsersUsesDerivedAdminSearchStore(t *testing.T) {
@@ -70,7 +90,7 @@ func TestStoreSearchUsersUsesDerivedAdminSearchStore(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, legacyUsers)
 
-	s := New(NewOptions(WithDB(hybrid)))
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
 
 	users, err := s.SearchUsers(wkdb.UserSearchReq{Limit: 10})
 	require.NoError(t, err)

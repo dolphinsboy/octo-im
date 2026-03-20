@@ -16,7 +16,7 @@ func (s *Store) AddOrUpdateConversations(conversations []wkdb.Conversation) erro
 
 	for i, c := range conversations {
 		if c.Id == 0 {
-			conversations[i].Id = s.NextPrimaryKey()
+			conversations[i].Id = s.nextPrimaryKey()
 			c = conversations[i]
 		}
 		slotId := s.opts.Slot.GetSlotId(c.Uid)
@@ -66,7 +66,7 @@ func (s *Store) AddOrUpdateUserConversations(uid string, conversations []wkdb.Co
 	}
 	for i, c := range conversations {
 		if c.Id == 0 {
-			conversations[i].Id = s.NextPrimaryKey() // 如果id为0，生成一个新的id
+			conversations[i].Id = s.nextPrimaryKey() // 如果id为0，生成一个新的id
 		}
 	}
 	data, err := EncodeCMDAddOrUpdateUserConversations(uid, conversations)
@@ -98,7 +98,7 @@ func (s *Store) AddConversationsIfNotExist(conversations []wkdb.Conversation) er
 			continue
 		}
 		if c.Id == 0 {
-			c.Id = s.NextPrimaryKey()
+			c.Id = s.nextPrimaryKey()
 		}
 		slotId := s.opts.Slot.GetSlotId(c.Uid)
 		slotConversationsMap[slotId] = append(slotConversationsMap[slotId], c)
@@ -229,7 +229,7 @@ func (s *Store) GetLastConversations(uid string, tp wkdb.ConversationType, updat
 }
 
 func (s *Store) GetChannelLastMessageSeq(channelId string, channelType uint8) (uint64, error) {
-	seq, _, err := s.messageStore.GetChannelLastMessageSeq(channelId, channelType)
+	seq, _, err := s.messageQueryStore.GetChannelLastMessageSeq(channelId, channelType)
 	return seq, err
 }
 
