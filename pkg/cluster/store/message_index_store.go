@@ -8,6 +8,18 @@ type MessageIndexStore interface {
 	GetUserLastMsgSeqBatch(fromUid string, channels []wkdb.Channel) (map[string]uint64, error)
 }
 
+func (v *V3MessageStore) LoadMsgByClientMsgNo(channelId string, channelType uint8, clientMsgNo string) (wkdb.Message, error) {
+	return v.store.LoadMsgByClientMsgNo(channelId, channelType, clientMsgNo)
+}
+
+func (v *V3MessageStore) GetUserLastMsgSeq(fromUid string, channelId string, channelType uint8) (uint64, error) {
+	return v.store.GetUserLastMsgSeq(fromUid, channelId, channelType)
+}
+
+func (v *V3MessageStore) GetUserLastMsgSeqBatch(fromUid string, channels []wkdb.Channel) (map[string]uint64, error) {
+	return v.store.GetUserLastMsgSeqBatch(fromUid, channels)
+}
+
 type LegacyMessageIndexStore struct {
 	db wkdb.DB
 }

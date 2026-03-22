@@ -35,14 +35,16 @@ type PebbleDB struct {
 	readOnly      bool
 	now           func() time.Time
 
-	buckets     *PebbleBucketManager
-	metaPebble  *pebble.DB
-	localPebble *pebble.DB
-	snapshotter *RawKVSnapshotter
-	slots       *pebbleSlotDB
-	meta        MetaDB
-	local       LocalDB
-	maintenance *pebbleMaintenance
+	buckets        *PebbleBucketManager
+	channelBuckets *PebbleBucketManager
+	metaPebble     *pebble.DB
+	localPebble    *pebble.DB
+	snapshotter    *RawKVSnapshotter
+	slots          *pebbleSlotDB
+	meta           MetaDB
+	local          LocalDB
+	channelLogs    ChannelLogStore
+	maintenance    *pebbleMaintenance
 }
 
 var _ DB = (*PebbleDB)(nil)
@@ -68,6 +70,17 @@ func NewPebbleDB(opts PebbleDBOptions) (*PebbleDB, error) {
 	if err != nil {
 		return nil, err
 	}
+	channelBucketManager, err := NewPebbleBucketManager(PebbleBucketManagerOptions{
+		DataDir:       filepath.Join(opts.DataDir, "channel"),
+		Router:        opts.Router,
+		PebbleOptions: opts.PebbleOptions,
+		WriteOptions:  opts.WriteOptions,
+		FS:            opts.FS,
+		ReadOnly:      opts.ReadOnly,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	snapshotter, err := NewRawKVSnapshotter(bucketManager, bucketManager, bucketManager, RawKVSnapshotterOptions{
 		Now: opts.SnapshotNow,
@@ -77,13 +90,14 @@ func NewPebbleDB(opts PebbleDBOptions) (*PebbleDB, error) {
 	}
 
 	db := &PebbleDB{
-		dataDir:       opts.DataDir,
-		fs:            opts.FS,
-		pebbleOptions: opts.PebbleOptions,
-		writeOptions:  opts.WriteOptions,
-		readOnly:      opts.ReadOnly,
-		buckets:       bucketManager,
-		snapshotter:   snapshotter,
+		dataDir:        opts.DataDir,
+		fs:             opts.FS,
+		pebbleOptions:  opts.PebbleOptions,
+		writeOptions:   opts.WriteOptions,
+		readOnly:       opts.ReadOnly,
+		buckets:        bucketManager,
+		channelBuckets: channelBucketManager,
+		snapshotter:    snapshotter,
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -91,6 +105,10 @@ func NewPebbleDB(opts PebbleDBOptions) (*PebbleDB, error) {
 	db.now = opts.Now
 	db.meta = &pebbleMetaDB{owner: db}
 	db.local = &pebbleLocalDB{owner: db}
+	db.channelLogs = &pebbleChannelLogStore{
+		owner:   db,
+		buckets: channelBucketManager,
+	}
 	db.slots = &pebbleSlotDB{db: db, now: opts.Now}
 	db.maintenance = &pebbleMaintenance{
 		router:                opts.Router,
@@ -104,7 +122,12 @@ func (p *PebbleDB) Open() error {
 	if err := p.buckets.Open(); err != nil {
 		return err
 	}
+	if err := p.channelBuckets.Open(); err != nil {
+		_ = p.buckets.Close()
+		return err
+	}
 	if err := p.openStandaloneStores(); err != nil {
+		_ = p.channelBuckets.Close()
 		_ = p.buckets.Close()
 		return err
 	}
@@ -121,6 +144,9 @@ func (p *PebbleDB) Close() error {
 		err = errors.Join(err, p.metaPebble.Close())
 		p.metaPebble = nil
 	}
+	if p.channelBuckets != nil {
+		err = errors.Join(err, p.channelBuckets.Close())
+	}
 	err = errors.Join(err, p.buckets.Close())
 	return err
 }
@@ -135,6 +161,10 @@ func (p *PebbleDB) Meta() MetaDB {
 
 func (p *PebbleDB) Local() LocalDB {
 	return p.local
+}
+
+func (p *PebbleDB) ChannelLogs() ChannelLogStore {
+	return p.channelLogs
 }
 
 func (p *PebbleDB) Snapshotter() SlotSnapshotter {

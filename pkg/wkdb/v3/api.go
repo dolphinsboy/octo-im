@@ -14,6 +14,7 @@ type DB interface {
 	Slots() SlotDB
 	Meta() MetaDB
 	Local() LocalDB
+	ChannelLogs() ChannelLogStore
 
 	Snapshotter() SlotSnapshotter
 	Maintenance() Maintenance
@@ -183,4 +184,30 @@ type NotifyQueueStore interface {
 	List(count int) ([]wkdb.Message, error)
 	Delete(messageIDs []int64) error
 	DeleteCount(count int) error
+}
+
+type ChannelLogStore interface {
+	GetMessage(messageID uint64) (wkdb.Message, error)
+	AppendMessages(channelID string, channelType uint8, msgs []wkdb.Message) error
+	LoadPrevRangeMsgs(channelID string, channelType uint8, startMessageSeq, endMessageSeq uint64, limit int) ([]wkdb.Message, error)
+	LoadNextRangeMsgs(channelID string, channelType uint8, startMessageSeq, endMessageSeq uint64, limit int) ([]wkdb.Message, error)
+	LoadNextRangeMsgsForSize(channelID string, channelType uint8, startMessageSeq, endMessageSeq, limitSize uint64) ([]wkdb.Message, error)
+	LoadMsg(channelID string, channelType uint8, seq uint64) (wkdb.Message, error)
+	TruncateLogTo(channelID string, channelType uint8, messageSeq uint64) error
+	LoadLastMsgsWithEnd(channelID string, channelType uint8, endMessageSeq uint64, limit int) ([]wkdb.Message, error)
+	LoadLastMsgs(channelID string, channelType uint8, limit int) ([]wkdb.Message, error)
+	GetChannelLastMessageSeq(channelID string, channelType uint8) (seq uint64, lastTime uint64, err error)
+	SetChannelLastMessageSeq(channelID string, channelType uint8, seq uint64) error
+	SearchMessages(req wkdb.MessageSearchReq) ([]wkdb.Message, error)
+	CountMessages() (int, error)
+	GetLastMsg(channelID string, channelType uint8) (wkdb.Message, error)
+	LoadMsgByClientMsgNo(channelID string, channelType uint8, clientMsgNo string) (wkdb.Message, error)
+	GetUserLastMsgSeq(fromUID string, channelID string, channelType uint8) (uint64, error)
+	LoadMsgsBatch(requests []wkdb.BatchMsgRequest) ([]wkdb.BatchMsgResponse, error)
+	GetUserLastMsgSeqBatch(fromUID string, channels []wkdb.Channel) (map[string]uint64, error)
+	SetLeaderTermStartIndex(shardNo string, term uint32, index uint64) error
+	LeaderTermStartIndex(shardNo string, term uint32) (uint64, error)
+	LeaderLastTerm(shardNo string) (uint32, error)
+	LeaderLastTermGreaterEqThan(shardNo string, term uint32) (uint32, error)
+	DeleteLeaderTermStartIndexGreaterThanTerm(shardNo string, term uint32) error
 }

@@ -88,6 +88,10 @@ func WithCompatDBRuntime(db wkdb.DB) Option {
 			})
 			o.ChannelStateStore = NewSlotChannelStateStore(hybrid.slotDB, hybrid.routeSlot)
 			o.ChannelClusterConfigStore = NewSlotChannelClusterConfigStore(hybrid.slotDB, hybrid.slotCount, hybrid.routeSlot)
+			messageStore := NewV3MessageStore(hybrid.slotDB.ChannelLogs())
+			o.MessageQueryStore = messageStore
+			o.MessageIndexStore = messageStore
+			o.MessageSearchStore = messageStore
 			o.NotifyQueueStore = NewLocalNotifyQueueStore(hybrid.slotDB)
 			o.MessageEventStore = NewSlotMessageEventStore(hybrid.slotDB, hybrid.routeSlot)
 			o.AdminSearchStore = NewSlotAdminSearchStore(hybrid.slotDB, hybrid.slotCount, hybrid.routeSlot)

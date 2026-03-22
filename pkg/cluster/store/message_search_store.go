@@ -7,6 +7,14 @@ type MessageSearchStore interface {
 	CountMessages() (int, error)
 }
 
+func (v *V3MessageStore) SearchMessages(req wkdb.MessageSearchReq) ([]wkdb.Message, error) {
+	return v.store.SearchMessages(req)
+}
+
+func (v *V3MessageStore) CountMessages() (int, error) {
+	return v.store.CountMessages()
+}
+
 type LegacyMessageSearchStore struct {
 	db wkdb.DB
 }

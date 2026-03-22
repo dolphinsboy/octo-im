@@ -27,8 +27,8 @@ func TestNewHybridRuntimeUsesDedicatedPrimaryKeyAllocator(t *testing.T) {
 	require.NotZero(t, id1)
 	require.NotZero(t, id2)
 	require.NotEqual(t, id1, id2)
-	require.IsType(t, &LegacyChannelLogStore{}, runtime.ChannelLogStore)
-	require.IsType(t, &LegacyMessageQueryStore{}, runtime.MessageQueryStore)
-	require.IsType(t, &LegacyMessageIndexStore{}, runtime.MessageIndexStore)
-	require.IsType(t, &LegacyMessageSearchStore{}, runtime.MessageSearchStore)
+	require.IsType(t, &V3MessageStore{}, runtime.ChannelLogStore)
+	require.IsType(t, &V3MessageStore{}, runtime.MessageQueryStore)
+	require.IsType(t, &V3MessageStore{}, runtime.MessageIndexStore)
+	require.IsType(t, &V3MessageStore{}, runtime.MessageSearchStore)
 }

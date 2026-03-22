@@ -85,10 +85,7 @@ func NewHybridRuntime(opts HybridRuntimeOptions) (*HybridRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	channelLogStore := NewLegacyChannelLogStore(db)
-	messageQueryStore := NewLegacyMessageQueryStore(db)
-	messageIndexStore := NewLegacyMessageIndexStore(db)
-	messageSearchStore := NewLegacyMessageSearchStore(db)
+	messageStore := NewV3MessageStore(slotStateDB.ChannelLogs())
 	return &HybridRuntime{
 		Lifecycle:                 db,
 		SlotSnapshotBackend:       db,
@@ -97,10 +94,10 @@ func NewHybridRuntime(opts HybridRuntimeOptions) (*HybridRuntime, error) {
 		ConversationStore:         NewSlotConversationStore(slotStateDB, opts.SlotCount, routeSlot, primaryKeyAllocator.NextPrimaryKey),
 		ChannelStateStore:         NewSlotChannelStateStore(slotStateDB, routeSlot),
 		ChannelClusterConfigStore: NewSlotChannelClusterConfigStore(slotStateDB, opts.SlotCount, routeSlot),
-		ChannelLogStore:           channelLogStore,
-		MessageQueryStore:         messageQueryStore,
-		MessageIndexStore:         messageIndexStore,
-		MessageSearchStore:        messageSearchStore,
+		ChannelLogStore:           messageStore,
+		MessageQueryStore:         messageStore,
+		MessageIndexStore:         messageStore,
+		MessageSearchStore:        messageStore,
 		NotifyQueueStore:          NewLocalNotifyQueueStore(slotStateDB),
 		MessageEventStore:         NewSlotMessageEventStore(slotStateDB, routeSlot),
 		MetaStore:                 db,

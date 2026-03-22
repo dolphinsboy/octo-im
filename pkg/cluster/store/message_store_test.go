@@ -13,6 +13,10 @@ var _ channel.ChannelLogStore = (*LegacyChannelLogStore)(nil)
 var _ MessageQueryStore = (*LegacyMessageQueryStore)(nil)
 var _ MessageIndexStore = (*LegacyMessageIndexStore)(nil)
 var _ MessageSearchStore = (*LegacyMessageSearchStore)(nil)
+var _ channel.ChannelLogStore = (*V3MessageStore)(nil)
+var _ MessageQueryStore = (*V3MessageStore)(nil)
+var _ MessageIndexStore = (*V3MessageStore)(nil)
+var _ MessageSearchStore = (*V3MessageStore)(nil)
 
 type stubMessageStore struct {
 	loadNextRangeMsgsFn        func(channelID string, channelType uint8, startMessageSeq, endMessageSeq uint64, limit int) ([]wkdb.Message, error)
@@ -444,4 +448,51 @@ func TestStoreDerivesNotifyQueueStoreFromHybridDB(t *testing.T) {
 	messages, err = s.GetMessagesOfNotifyQueue(10)
 	require.NoError(t, err)
 	require.Nil(t, messages)
+}
+
+func TestStoreDerivesMessageStoresFromHybridDB(t *testing.T) {
+	hybrid, legacy := newHybridMetaLocalTestDB(t)
+	s := New(NewOptions(WithCompatDBRuntime(hybrid)))
+
+	require.IsType(t, &V3MessageStore{}, s.messageQueryStore)
+	require.IsType(t, &V3MessageStore{}, s.messageIndexStore)
+	require.IsType(t, &V3MessageStore{}, s.messageSearchStore)
+
+	require.NoError(t, hybrid.AppendMessages("channel-1", 2, []wkdb.Message{
+		{
+			RecvPacket: wkproto.RecvPacket{
+				MessageID:   1,
+				MessageSeq:  1,
+				ChannelID:   "channel-1",
+				ChannelType: 2,
+				FromUID:     "user-1",
+				ClientMsgNo: "client-1",
+				Timestamp:   100,
+				Payload:     []byte("hello"),
+			},
+			Term: 1,
+		},
+	}))
+
+	msg, err := s.LoadMsgByClientMsgNo("channel-1", 2, "client-1")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), msg.MessageID)
+
+	results, err := s.SearchMessages(wkdb.MessageSearchReq{
+		ChannelId:   "channel-1",
+		ChannelType: 2,
+		ClientMsgNo: "client-1",
+		Limit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	legacyResults, err := legacy.SearchMessages(wkdb.MessageSearchReq{
+		ChannelId:   "channel-1",
+		ChannelType: 2,
+		ClientMsgNo: "client-1",
+		Limit:       10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, legacyResults)
 }

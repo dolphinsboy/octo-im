@@ -1,6 +1,9 @@
 package store
 
-import "github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
+import (
+	"github.com/WuKongIM/WuKongIM/pkg/wkdb/v2"
+	wkdbv3 "github.com/WuKongIM/WuKongIM/pkg/wkdb/v3"
+)
 
 type MessageQueryStore interface {
 	GetChannelLastMessageSeq(channelId string, channelType uint8) (seq uint64, lastTime uint64, err error)
@@ -10,6 +13,77 @@ type MessageQueryStore interface {
 	LoadLastMsgs(channelId string, channelType uint8, limit int) ([]wkdb.Message, error)
 	LoadLastMsgsWithEnd(channelId string, channelType uint8, endMessageSeq uint64, limit int) ([]wkdb.Message, error)
 	LoadPrevRangeMsgs(channelId string, channelType uint8, start, end uint64, limit int) ([]wkdb.Message, error)
+}
+
+type V3MessageStore struct {
+	store wkdbv3.ChannelLogStore
+}
+
+func NewV3MessageStore(store wkdbv3.ChannelLogStore) *V3MessageStore {
+	if store == nil {
+		return nil
+	}
+	return &V3MessageStore{store: store}
+}
+
+func (v *V3MessageStore) GetLastMsg(channelId string, channelType uint8) (wkdb.Message, error) {
+	return v.store.GetLastMsg(channelId, channelType)
+}
+
+func (v *V3MessageStore) AppendMessages(channelId string, channelType uint8, msgs []wkdb.Message) error {
+	return v.store.AppendMessages(channelId, channelType, msgs)
+}
+
+func (v *V3MessageStore) LoadNextRangeMsgsForSize(channelId string, channelType uint8, startMessageSeq, endMessageSeq, limitSize uint64) ([]wkdb.Message, error) {
+	return v.store.LoadNextRangeMsgsForSize(channelId, channelType, startMessageSeq, endMessageSeq, limitSize)
+}
+
+func (v *V3MessageStore) TruncateLogTo(channelId string, channelType uint8, messageSeq uint64) error {
+	return v.store.TruncateLogTo(channelId, channelType, messageSeq)
+}
+
+func (v *V3MessageStore) GetChannelLastMessageSeq(channelId string, channelType uint8) (seq uint64, lastTime uint64, err error) {
+	return v.store.GetChannelLastMessageSeq(channelId, channelType)
+}
+
+func (v *V3MessageStore) SetLeaderTermStartIndex(shardNo string, term uint32, index uint64) error {
+	return v.store.SetLeaderTermStartIndex(shardNo, term, index)
+}
+
+func (v *V3MessageStore) LeaderTermStartIndex(shardNo string, term uint32) (uint64, error) {
+	return v.store.LeaderTermStartIndex(shardNo, term)
+}
+
+func (v *V3MessageStore) LeaderLastTerm(shardNo string) (uint32, error) {
+	return v.store.LeaderLastTerm(shardNo)
+}
+
+func (v *V3MessageStore) LeaderLastTermGreaterEqThan(shardNo string, term uint32) (uint32, error) {
+	return v.store.LeaderLastTermGreaterEqThan(shardNo, term)
+}
+
+func (v *V3MessageStore) DeleteLeaderTermStartIndexGreaterThanTerm(shardNo string, term uint32) error {
+	return v.store.DeleteLeaderTermStartIndexGreaterThanTerm(shardNo, term)
+}
+
+func (v *V3MessageStore) LoadNextRangeMsgs(channelId string, channelType uint8, startMessageSeq, endMessageSeq uint64, limit int) ([]wkdb.Message, error) {
+	return v.store.LoadNextRangeMsgs(channelId, channelType, startMessageSeq, endMessageSeq, limit)
+}
+
+func (v *V3MessageStore) LoadMsg(channelId string, channelType uint8, seq uint64) (wkdb.Message, error) {
+	return v.store.LoadMsg(channelId, channelType, seq)
+}
+
+func (v *V3MessageStore) LoadLastMsgs(channelId string, channelType uint8, limit int) ([]wkdb.Message, error) {
+	return v.store.LoadLastMsgs(channelId, channelType, limit)
+}
+
+func (v *V3MessageStore) LoadLastMsgsWithEnd(channelId string, channelType uint8, endMessageSeq uint64, limit int) ([]wkdb.Message, error) {
+	return v.store.LoadLastMsgsWithEnd(channelId, channelType, endMessageSeq, limit)
+}
+
+func (v *V3MessageStore) LoadPrevRangeMsgs(channelId string, channelType uint8, start, end uint64, limit int) ([]wkdb.Message, error) {
+	return v.store.LoadPrevRangeMsgs(channelId, channelType, start, end, limit)
 }
 
 type LegacyChannelLogStore struct {
